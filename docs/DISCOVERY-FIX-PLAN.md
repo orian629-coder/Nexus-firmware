@@ -11,7 +11,18 @@
   the Avahi client on an avahi-threaded-poll (persistent; re-publishes on daemon restart; logs
   id collisions without renaming). Real-Avahi TU compile+symbol-verified against libavahi 0.8;
   host-debug tests assert advertise-at-startup + degraded path. **On-wire proof is Phase 3.**
-- **Not started (need approval):** Phase 3 build+deploy-to-device, Phase 4 reboot-stabilization,
+- **Phase 3 — build + deploy (IN PROGRESS, streamer done):** `nexus-streamer` rebuilt with the real
+  HAL and installed on the `streamer` Pi (backup at `/usr/local/bin/nexus-streamer.bak-phase3`).
+  **Phase 2 verified on the device:** the streamer now publishes `_nexus-streamer._tcp` (id
+  `STR-a14ad83e` + correct public_key) — confirmed via `avahi-browse` on the streamer host; before
+  the deploy it advertised nothing. **NEW BLOCKER (environmental, not firmware):** the service does
+  NOT propagate over the shop WiFi — `speaker1` resolves `raspberrypi.local` (address records cross)
+  but never sees the `_nexus-streamer._tcp` *service* (25s browse, post-restart). Classic WiFi-AP
+  multicast dropping/isolation: unicast mDNS responses (name resolution) get through, multicast
+  service announcements/responses do not. This validates the private-SSID / ethernet→AP direction —
+  mDNS over uncontrolled WiFi is unreliable. Speakers NOT yet redeployed (would falsely appear stuck
+  in SEARCHING_STREAMER for a network reason, not the firmware).
+- **Not started (need approval):** Phase 4 reboot-stabilization,
   Phase 5 duplication. Also noted for later: the speaker's setup-mode beacon (`AvahiDiscoveryHal::
   publishBeacon`) has the same one-shot-poll pattern Phase 2 fixed on the streamer — harmless while
   a phone drives setup, but worth the same threaded-poll treatment for the streamer→speaker
