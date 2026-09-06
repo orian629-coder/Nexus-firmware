@@ -1,6 +1,21 @@
 # Discovery Fix — Plan (Phases 0–2)
 
-**Status:** in progress · **Owner branch:** `fix/discovery-wiring`
+**Status:** Phases 0–2 DONE (host-verified) · **Owner branch:** `fix/discovery-wiring`
+
+## Progress
+- **Phase 0 — version control + repo rules:** done (`6cdb804` baseline, `0fe62b2` docs).
+- **Phase 1 — speaker finds its streamer:** done (`42072ce`). Browse worker + public-key
+  trust check in `DiscoveryService`; `Application` starts/stops it on the SEARCHING_STREAMER
+  state edge. Proven on host: paired speaker auto-advances SEARCHING_STREAMER → AUTHENTICATING.
+- **Phase 2 — streamer advertises reliably:** done (`7b3e170`). `AvahiStreamerDiscovery` now runs
+  the Avahi client on an avahi-threaded-poll (persistent; re-publishes on daemon restart; logs
+  id collisions without renaming). Real-Avahi TU compile+symbol-verified against libavahi 0.8;
+  host-debug tests assert advertise-at-startup + degraded path. **On-wire proof is Phase 3.**
+- **Not started (need approval):** Phase 3 build+deploy-to-device, Phase 4 reboot-stabilization,
+  Phase 5 duplication. Also noted for later: the speaker's setup-mode beacon (`AvahiDiscoveryHal::
+  publishBeacon`) has the same one-shot-poll pattern Phase 2 fixed on the streamer — harmless while
+  a phone drives setup, but worth the same threaded-poll treatment for the streamer→speaker
+  onboarding browse.
 
 **Approved scope:** version control + repo rules (Phase 0, done), speaker "find the streamer"
 fix (Phase 1), streamer "advertise reliably" fix (Phase 2). **NOT** build/deploy-to-device
