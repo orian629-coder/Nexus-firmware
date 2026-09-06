@@ -1,8 +1,12 @@
 #include <gtest/gtest.h>
 
+#include <memory>
+
+#include "discovery/DiscoveryService.h"
 #include "discovery/IStreamerDiscovery.h"
 
 using namespace nexus::streamer::discovery;
+using nexus::core::ServiceState;
 
 // The stub verifies the interface contract the onboarding flow relies on: advertise records the
 // streamer service fields, and browseSpeakers yields a beacon with the fields the PairingClient
@@ -36,4 +40,31 @@ TEST(StreamerDiscovery, BrowseYieldsPairableSpeakerBeacon) {
   EXPECT_FALSE(b.box_public_key.empty());   // needed to seal Wi-Fi creds
   EXPECT_EQ(b.control_port, 45455);
   EXPECT_TRUE(b.setup_mode);
+}
+
+// Phase 2: DiscoveryService must advertise the streamer as soon as it starts (this is what makes a
+// speaker able to find it), publishing the streamer_id/public_key/port, and clear it on stop.
+TEST(StreamerDiscoveryService, StartAdvertisesAndStopClears) {
+  auto stub = std::make_shared<StubStreamerDiscovery>();
+  DiscoveryService svc(stub, "STR-LAB01", "cGstYjY0", 8090);
+  EXPECT_FALSE(stub->advertising());
+
+  ASSERT_TRUE(svc.start().ok());
+  EXPECT_EQ(svc.state(), ServiceState::Running);
+  EXPECT_TRUE(stub->advertising());
+  EXPECT_EQ(stub->advertised().streamer_id, "STR-LAB01");
+  EXPECT_EQ(stub->advertised().public_key, "cGstYjY0");
+  EXPECT_EQ(stub->advertised().port, 8090);
+
+  ASSERT_TRUE(svc.stop().ok());
+  EXPECT_EQ(svc.state(), ServiceState::Stopped);
+  EXPECT_FALSE(stub->advertising());
+}
+
+// A build with no mDNS backend (null discovery) must not fail startup — the streamer still runs and
+// speakers can be added by address; the service reports Degraded rather than erroring.
+TEST(StreamerDiscoveryService, NullDiscoveryStartsDegraded) {
+  DiscoveryService svc(nullptr, "STR-LAB01", "cGstYjY0", 8090);
+  ASSERT_TRUE(svc.start().ok());
+  EXPECT_EQ(svc.state(), ServiceState::Degraded);
 }
