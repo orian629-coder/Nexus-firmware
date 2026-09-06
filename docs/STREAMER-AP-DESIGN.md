@@ -80,8 +80,9 @@ silent one.
   derived SSID/passphrase) installed at deploy and brought up at boot — modeled on `hotspot.sh`.
   Minimal or no C++ (a script + unit + install step; a small hook in `StreamerApp` only if boot
   ordering needs it).
-- **Speaker:** derive-creds-and-join logic reusing `ApScanner` / `ApJoiner`, preferring `Nexus-*`
-  over venue WiFi, remembered in speaker config.
+- **Speaker:** derive-creds-and-join logic over the existing `nexus::network::NetworkManager` /
+  `INetworkHal` (`scan()` + `connectWifi()`), preferring `Nexus-*` over venue WiFi, wired on the
+  `CONNECTING_NETWORK` state edge. (`ApScanner`/`ApJoiner` are streamer-only — not used here.)
 - **Discovery:** **unchanged.** The wire contract (`_nexus-streamer._tcp` :8090, `_nexus-speaker.
   _tcp` :45455, TCP 45455, UDP 50005) is untouched. Nothing in the Phase 1–2 work changes.
 
