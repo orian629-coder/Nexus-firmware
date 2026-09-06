@@ -1,0 +1,60 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# nexus-kiosk.service — תצוגת הרמקול הנייטיב על מסך ה-HDMI (Python/Pygame).
+#
+# תצוגה מקומית מלאה במסך, ללא דפדפן. עולה אוטומטית עם המערכת, מציירת ישירות על
+# ה-framebuffer/KMS (SDL kmsdrm) ומושכת נתונים מה-REST API של הרמקול (:8080).
+#
+# התקנה:
+#   sudo apt install python3-pygame python3-qrcode python3-bidi
+#   sudo cp gui/kiosk/display.py /usr/local/bin/nexus-kiosk.py
+#   sudo cp deploy/nexus-kiosk.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now nexus-kiosk.service
+#   journalctl -u nexus-kiosk -f
+#
+# ⚠️ הרמקול (nexus-speaker.service) צריך לרוץ במקביל — הוא מקור הנתונים (REST :8080).
+# ⚠️ חובה multi-user.target (לא graphical): SDL kmsdrm צריך את ה-DRM master, וכל
+#    דסקטופ (Wayland/labwc/X) יחזיק אותו ויגרום ל-HUP. כבה עם:
+#      sudo systemctl set-default multi-user.target && sudo reboot
+# ─────────────────────────────────────────────────────────────────────────────
+
+[Unit]
+Description=Nexus Speaker Kiosk Display (HDMI)
+# עולה אחרי הרשת ואחרי שירות הרמקול עצמו (מקור ה-REST).
+After=network-online.target nexus-speaker.service
+Wants=network-online.target
+# חוסם את ה-getty על ה-tty הפיזי כדי לצייר עליו בלי התנגשות.
+Conflicts=getty@tty1.service
+# StartLimit שייך ל-[Unit] (ב-[Service] systemd מתעלם עם אזהרה).
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+# SDL מצייר ישירות על ה-GPU דרך KMS/DRM — בלי X11/Wayland, בלי דפדפן.
+Environment=SDL_VIDEODRIVER=kmsdrm
+Environment=PYGAME_HIDE_SUPPORT_PROMPT=1
+# בלי buffering — שהודעות ה-print (סטטוס poll וכו') יופיעו בזמן אמת ב-journal.
+Environment=PYTHONUNBUFFERED=1
+# מקור ה-REST של הרמקול המקומי.
+Environment=NEXUS_API_BASE=http://localhost:8080
+# משתמש בקובץ ההגדרות של הרמקול (apiBase/deviceId/joinBaseUrl) אם קיים.
+Environment=NEXUS_KIOSK_CONFIG=/etc/nexus-speaker/config.json
+
+ExecStart=/usr/bin/python3 /usr/local/bin/nexus-kiosk.py
+
+# תופס את ה-tty הפיזי (נדרש ל-kmsdrm) ומחזיר אותו בעצירה.
+TTYPath=/dev/tty1
+StandardInput=tty
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=nexus-kiosk
+
+Restart=on-failure
+RestartSec=5
+
+# גישה לחומרת הגרפיקה/קלט.
+SupplementaryGroups=video render input tty
+
+[Install]
+WantedBy=multi-user.target

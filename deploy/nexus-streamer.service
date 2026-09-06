@@ -1,0 +1,57 @@
+# systemd unit for the Nexus Streamer (audio sender + controller).
+# Install to /etc/systemd/system/nexus-streamer.service, then:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now nexus-streamer.service
+#   journalctl -u nexus-streamer -f
+#
+# This runs the browser control UI (--serve). The audio-send pipeline (--stream) is fed from a
+# capture source (e.g. `pw-record ... | nexus-streamer --stream <ips>`), so it is typically launched
+# on demand rather than as this long-running unit. Run the streamer on a host synced to the same
+# clock as the speakers (see scripts/setup-ntp.sh) for sample-aligned multi-room.
+
+[Unit]
+Description=Nexus Streamer
+After=network-online.target sound.target avahi-daemon.service
+Wants=network-online.target avahi-daemon.service
+# StartLimit* belong to the UNIT, not the service. Setting them under [Service] makes systemd log
+# "Unknown key 'StartLimitIntervalSec' in section [Service], ignoring" and silently drop the limit.
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+# Control UI on 8090; the streamer's persistent identity lives under its state dir.
+Environment=NEXUS_STREAMER_KEY=/var/lib/nexus-streamer/identity.key
+# Pin the config path too. Without this it falls back to $HOME/.nexus-streamer/config.json, which
+# lands in a nested directory under the state dir and depends on HOME staying writable under
+# ProtectHome. The config holds the API token: if it fails to persist, a new token is generated on
+# every restart and every previously printed control QR stops working.
+Environment=NEXUS_STREAMER_CONFIG=/var/lib/nexus-streamer/config.json
+# --bind 0.0.0.0: the default is loopback-only, which makes the UI unreachable from the LAN — i.e.
+# from the phone or laptop that is supposed to control the system. This unit exists to serve the
+# whole site, so it must listen on the network.
+ExecStart=/usr/local/bin/nexus-streamer --serve 8090 --bind 0.0.0.0
+
+# Dedicated non-root user; audio group for capture, bluetooth for A2DP source (Phase 4).
+User=nexus-streamer
+Group=nexus-streamer
+SupplementaryGroups=audio bluetooth
+
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=30
+TimeoutStopSec=15
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=nexus-streamer
+
+# Hardening (compatible with sockets + audio capture the streamer needs).
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=false
+ReadWritePaths=/etc/nexus-streamer /var/log/nexus-streamer /var/lib/nexus-streamer
+
+[Install]
+WantedBy=multi-user.target

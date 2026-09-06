@@ -1,0 +1,11 @@
+# udev rules granting the nexus-speaker service access to audio and I2C/GPIO device nodes
+# without running as root. Install to /etc/udev/rules.d/99-nexus-speaker.rules and reload:
+#   sudo udevadm control --reload-rules && sudo udevadm trigger
+
+# ALSA / I2S audio devices.
+SUBSYSTEM=="sound", GROUP="audio", MODE="0660"
+
+# I2C (amplifier control / sensors) and GPIO — assign to groups the service is a member of when
+# those features are enabled in a later phase.
+SUBSYSTEM=="i2c-dev", GROUP="i2c", MODE="0660"
+SUBSYSTEM=="gpio", GROUP="gpio", MODE="0660"

@@ -1,0 +1,35 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": { "major": 3, "minor": 20, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "host-debug",
+      "displayName": "Host Debug (stub HAL)",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "NEXUS_BUILD_TESTS": "ON",
+        "NEXUS_STUB_HAL": "ON"
+      }
+    },
+    {
+      "name": "rpi-release",
+      "displayName": "Raspberry Pi Release (real HAL)",
+      "binaryDir": "${sourceDir}/build-rpi",
+      "toolchainFile": "${sourceDir}/cmake/toolchain-rpi-aarch64.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "NEXUS_BUILD_TESTS": "OFF",
+        "NEXUS_STUB_HAL": "OFF",
+        "NEXUS_WERROR": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "host-debug", "configurePreset": "host-debug" },
+    { "name": "rpi-release", "configurePreset": "rpi-release" }
+  ],
+  "testPresets": [
+    { "name": "host-debug", "configurePreset": "host-debug", "output": { "outputOnFailure": true } }
+  ]
+}

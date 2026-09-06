@@ -1,0 +1,28 @@
+# nexus-hotspot.service — Wi-Fi setup Access Point + captive portal.
+#
+# Brings up the "Nexus-Setup" Wi-Fi AP on wlan0 (via scripts/hotspot.sh) so a phone — including
+# iPhones, which can't use Web Bluetooth — can join it and reach the /setup page to hand over the
+# real Wi-Fi credentials. Started/stopped on demand by nexus-speaker's ProvisioningController
+# (only while the device has no network), alongside the BLE channel.
+#
+#   systemctl start nexus-hotspot     # (normally driven by nexus-speaker, not by hand)
+
+[Unit]
+Description=Nexus Wi-Fi Setup Hotspot
+After=NetworkManager.service
+Wants=NetworkManager.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/nexus-hotspot.sh up
+ExecStop=/usr/local/bin/nexus-hotspot.sh down
+Environment=NEXUS_HOTSPOT_SSID=Nexus-Setup
+Environment=NEXUS_HOTSPOT_IFACE=wlan0
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=nexus-hotspot
+
+# Started on demand by ProvisioningController; not wanted by a target.
+[Install]
+WantedBy=

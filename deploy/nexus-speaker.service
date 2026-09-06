@@ -1,0 +1,61 @@
+# systemd unit for Nexus Speaker OS.
+# Install to /etc/systemd/system/nexus-speaker.service (done by scripts/install.sh), then:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now nexus-speaker.service
+#   journalctl -u nexus-speaker -f
+
+[Unit]
+Description=Nexus Speaker OS
+Documentation=file:/usr/share/doc/nexus-speaker/operations.md
+After=network-online.target sound.target bluetooth.target
+Wants=network-online.target bluetooth.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/nexus-speaker --config /etc/nexus-speaker/config.json
+# Web UI port (override if 8080 is taken by another local service).
+Environment=NEXUS_WEB_PORT=8080
+
+# Audio goes through this user's PipeWire instance (see scripts/setup-audio.sh): the speaker plays
+# to the ALSA "default" device, which pipewire-alsa bridges into the shared PipeWire graph — the
+# same graph the A2DP sink feeds into. Keep config.json's audio.output_device = "default" for this
+# to route via PipeWire. XDG_RUNTIME_DIR (=/run/user/<uid>) is set by a drop-in that setup-audio.sh
+# writes, since a system unit cannot compute the service user's uid on its own (%t = /run here).
+
+# Dedicated non-root user; hardware access via supplementary groups, network control via polkit.
+# audio → ALSA/I2S, gpio → amplifier mute/fault lines (libgpiod), i2c/spi → amp control if used,
+# bluetooth → talk to BlueZ over the D-Bus system bus (bluetoothctl A2DP sink).
+User=nexus-speaker
+Group=nexus-speaker
+SupplementaryGroups=audio gpio i2c spi bluetooth
+
+# Restart on failure with backoff; stop restarting after too many rapid crashes so a broken
+# build lands in a stable "failed" state (Watchdog/Safe-Mode handle escalation in-process).
+Restart=on-failure
+RestartSec=5
+StartLimitIntervalSec=60
+StartLimitBurst=5
+TimeoutStartSec=30
+TimeoutStopSec=15
+
+# Logs to the journal; the app also writes /var/log/nexus-speaker/speaker.log for offline use.
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=nexus-speaker
+
+# Hardening (compatible with the hardware/network access the speaker needs).
+NoNewPrivileges=true
+ProtectSystem=strict
+# ProtectHome=read-only (not true): the speaker connects to its own PipeWire socket under
+# /run/user/<uid> to route audio, which ProtectHome=true would hide. read-only still blocks writes
+# to /home and /root. PrivateTmp is off so the PipeWire client can share memfd/shm with the daemon.
+ProtectHome=read-only
+PrivateTmp=false
+ReadWritePaths=/etc/nexus-speaker /var/log/nexus-speaker /var/lib/nexus-speaker
+# Hardware device access. Device access is gated by group membership (audio/gpio/i2c) rather than
+# a DeviceAllow whitelist — a whitelist here switches systemd to a closed policy that tends to hide
+# /dev/snd sub-nodes needed by ALSA. Keep the default (auto) device policy.
+#   (If tighter isolation is required later, use `DeviceAllow=char-alsa rw` + `char-gpiochip rw`.)
+
+[Install]
+WantedBy=multi-user.target

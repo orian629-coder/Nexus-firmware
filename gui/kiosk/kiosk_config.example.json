@@ -1,0 +1,5 @@
+{
+  "apiBase": "http://localhost:8080",
+  "deviceId": "speaker-pi-001",
+  "joinBaseUrl": "https://nexus-audio.example.com/join"
+}

@@ -1,0 +1,25 @@
+# systemd unit for the Sync button: hold SPACE (or a GPIO button) 5s to reopen Wi-Fi setup.
+# Install to /etc/systemd/system/nexus-sync-button.service, then:
+#   sudo systemctl daemon-reload && sudo systemctl enable --now nexus-sync-button.service
+#
+# Runs as root: it reads raw keyboard input events and restarts nexus-speaker / starts the hotspot
+# to (re)enter setup mode. Switch to a GPIO button later with NEXUS_SYNC_INPUT=gpio.
+
+[Unit]
+Description=Nexus Sync Button (hold to reopen Wi-Fi setup)
+After=multi-user.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/local/bin/nexus-sync-button.py
+Environment=NEXUS_SYNC_INPUT=keyboard
+Environment=NEXUS_SYNC_HOLD_SEC=5
+# GPIO variant (later): set NEXUS_SYNC_INPUT=gpio and NEXUS_SYNC_GPIO_PIN=<bcm pin>.
+Restart=on-failure
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=nexus-sync-button
+
+[Install]
+WantedBy=multi-user.target

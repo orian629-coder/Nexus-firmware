@@ -1,0 +1,42 @@
+# Build output
+/build/
+/build-*/
+/out/
+cmake-build-*/
+# Nested build dirs (e.g. the macOS control app bundle) — compiled artifacts, not source.
+mac/*/build/
+*.app/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+Testing/
+_deps/
+
+# Python bytecode (kiosk display)
+__pycache__/
+*.pyc
+
+# Ad-hoc local deploy scripts
+command (*)
+
+# Editors / IDE
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+
+# Local runtime artifacts (never commit device secrets/state)
+*.key
+*.pem
+identity/
+secure/
+*.log
+config.local.json
+build*/
+*.o
+*.a
+*.dSYM/

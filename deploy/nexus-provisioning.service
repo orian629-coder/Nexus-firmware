@@ -1,0 +1,40 @@
+# nexus-provisioning.service — BLE GATT provisioning channel.
+#
+# Advertises a BLE setup service (Just Works, no pairing code) so a phone/streamer app can hand
+# over Wi-Fi + streamer credentials, which this helper forwards to the speaker's TCP pairing
+# endpoint (127.0.0.1:45455). See provisioning/ble_provisioning.py.
+#
+# NOT WantedBy any target: it is started/stopped on demand by nexus-speaker's ProvisioningController
+# (only while the device has no network). Installed + controlled by scripts/install.sh.
+#   systemctl start nexus-provisioning     # (normally driven by nexus-speaker, not by hand)
+#   journalctl -u nexus-provisioning -f
+
+[Unit]
+Description=Nexus BLE Provisioning Channel
+# Needs BlueZ up to talk to the adapter over D-Bus, and the speaker up so the TCP pairing endpoint
+# (127.0.0.1:45455) exists to forward credentials to.
+After=bluetooth.service nexus-speaker.service
+Wants=bluetooth.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/local/bin/nexus-provisioning.py
+Environment=NEXUS_PAIRING_HOST=127.0.0.1
+Environment=NEXUS_PAIRING_PORT=45455
+Environment="NEXUS_BLE_NAME=Nexus Setup"
+Environment=PYTHONUNBUFFERED=1
+
+# Talks to BlueZ over the system D-Bus and manages the adapter; needs the bluetooth group. Runs as
+# root because BlueZ LEAdvertisingManager/GATT registration and adapter control require it on the Pi.
+User=root
+SupplementaryGroups=bluetooth
+
+Restart=on-failure
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=nexus-provisioning
+
+# This unit is enabled but not wanted by a target: ProvisioningController start/stops it by name.
+[Install]
+WantedBy=

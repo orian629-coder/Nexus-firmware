@@ -1,0 +1,23 @@
+# ── Nexus Speaker OS — Raspberry Pi hardware config ──────────────────────────
+# Append these lines to /boot/firmware/config.txt (Bookworm) and reboot.
+# Adjust the DAC/amp overlay to match your HAT.
+
+# I2S audio (DAC / amplifier HAT). Disable the onboard analog audio so the I2S
+# device is card 0.
+dtparam=audio=off
+dtparam=i2s=on
+
+# Example DAC overlays — enable ONE that matches your hardware:
+dtoverlay=hifiberry-dac         # generic PCM5102-style I2S DAC / amp
+# dtoverlay=hifiberry-dacplus
+# dtoverlay=max98357a            # MAX98357A I2S amp (mono/stereo)
+# dtoverlay=googlevoicehat-soundcard   # if using a Voice HAT mic+amp
+
+# I2C (amplifier control / sensors) and SPI, if the board uses them.
+dtparam=i2c_arm=on
+# dtparam=spi=on
+
+# GPIO is available by default; the service accesses fault/mute lines via libgpiod.
+
+# Recommended: keep the CPU cool under sustained playback.
+# (No overclock; the amplifier thermal watchdog protects the driver, not the SoC.)

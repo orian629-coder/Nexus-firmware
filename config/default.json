@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "device": {
+    "device_id": "",
+    "serial_number": "",
+    "model": "NEXUS-SPEAKER-3",
+    "hardware_version": "1.0",
+    "software_version": "1.0.0"
+  },
+  "pairing": {
+    "paired": false,
+    "streamer_id": "",
+    "streamer_public_key": ""
+  },
+  "network": {
+    "wifi_configured": false,
+    "connection_mode": "wifi"
+  },
+  "audio": {
+    "volume": 30,
+    "muted": true,
+    "delay_ms": 0,
+    "eq_profile": "default"
+  },
+  "system": {
+    "auto_update": true,
+    "log_level": "info"
+  }
+}
