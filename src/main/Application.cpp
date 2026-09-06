@@ -284,6 +284,28 @@ void Application::buildServices() {
   bus_.subscribe(core::EventType::AudioStopped,
                  [this](const core::Event&) { amplifier_->mute(); });
 
+  // Drive streamer discovery off the state machine. Entering SEARCHING_STREAMER means we are paired
+  // and online but not yet talking to our streamer, so kick off a continuous mDNS browse for the
+  // paired streamer_id (verified against its stored public key). Leaving the state stops the worker.
+  //
+  // This is the wiring that was missing: DiscoveryService::findStreamer() had no caller, so a paired
+  // speaker reached SEARCHING_STREAMER and sat there forever. StateChanged carries from/to as the
+  // StateMachine's string names (see system::toString).
+  bus_.subscribe(core::EventType::StateChanged, [this](const core::Event& e) {
+    const std::string to = e.data.value("to", "");
+    const std::string from = e.data.value("from", "");
+    if (to == system::toString(system::SystemState::SearchingStreamer)) {
+      const auto& p = config_->get().pairing;
+      if (p.streamer_id.empty()) {
+        NX_LOG_WARN("main", "entered SEARCHING_STREAMER with no paired streamer_id — cannot search");
+        return;
+      }
+      discovery_->startSearching(p.streamer_id, p.streamer_public_key);
+    } else if (from == system::toString(system::SystemState::SearchingStreamer)) {
+      discovery_->stopSearching();
+    }
+  });
+
   // Push audio settings into the live DSP whenever a signed command changes them.
   //
   // Without this the command path only WROTE CONFIG: SET_DELAY from the streamer was persisted and

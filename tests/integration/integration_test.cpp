@@ -4,8 +4,10 @@
 #include <gtest/gtest.h>
 #include <sodium.h>
 
+#include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <thread>
 
 #include <nlohmann/json.hpp>
 
@@ -188,6 +190,65 @@ TEST(Integration, Phase2OnboardingReachesOnline) {
   pair.stop();
   disc.stop();
   net.stop();
+  sys.stop();
+}
+
+// Phase 1 wiring: a paired speaker that reaches SEARCHING_STREAMER must discover its streamer
+// AUTOMATICALLY — no manual findStreamer() call — and advance to AUTHENTICATING. Before this
+// wiring, DiscoveryService::findStreamer() had no caller and a paired device sat in
+// SEARCHING_STREAMER forever. This test installs the same StateChanged→startSearching subscription
+// that Application.cpp wires, and asserts the auto-advance. The stub HAL advertises "STR-LAB01".
+TEST(Integration, PairedSpeakerAutoDiscoversStreamerFromStateWiring) {
+  auto dir = sandbox("autodisc");
+  core::EventBus bus;
+  config::ConfigManager config((dir / "config.json").string(), &bus);
+  ASSERT_TRUE(config.start().ok());
+  ASSERT_TRUE(config
+                  .update([](config::SpeakerConfig& c) {
+                    c.pairing.paired = true;
+                    c.pairing.streamer_id = "STR-LAB01";  // matches StubDiscoveryHal
+                    c.pairing.streamer_public_key = "c3RyZWFtZXItcHVibGljLWtleQ==";
+                  })
+                  .ok());
+
+  system::SystemManager sys(&bus);
+  discovery::DiscoveryService disc(&bus);
+  ASSERT_TRUE(sys.start().ok());
+  ASSERT_TRUE(disc.start().ok());
+
+  // The wiring under test (mirrors Application::buildServices): entering SEARCHING_STREAMER starts
+  // the browse worker for the paired streamer; leaving it stops the worker. A short interval keeps
+  // the test snappy (the first browse is immediate regardless).
+  bus.subscribe(core::EventType::StateChanged, [&](const core::Event& e) {
+    const std::string to = e.data.value("to", "");
+    const std::string from = e.data.value("from", "");
+    if (to == system::toString(system::SystemState::SearchingStreamer)) {
+      const auto& p = config.get().pairing;
+      disc.startSearching(p.streamer_id, p.streamer_public_key, std::chrono::milliseconds(10));
+    } else if (from == system::toString(system::SystemState::SearchingStreamer)) {
+      disc.stopSearching();
+    }
+  });
+
+  // Paired device → CONNECTING_NETWORK; the uplink coming up drives SEARCHING_STREAMER, which must
+  // auto-advance to AUTHENTICATING with no manual discovery call.
+  sys.enterInitialState(config.get().pairing.paired);
+  ASSERT_EQ(sys.states().current(), system::SystemState::ConnectingNetwork);
+  bus.publish(core::Event{core::EventType::NetworkConnected, "n"});
+
+  bool reached = false;
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+  while (std::chrono::steady_clock::now() < deadline) {
+    if (sys.states().current() == system::SystemState::Authenticating) {
+      reached = true;
+      break;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  }
+  EXPECT_TRUE(reached) << "did not auto-discover; state="
+                       << system::toString(sys.states().current());
+
+  disc.stop();
   sys.stop();
 }
 
