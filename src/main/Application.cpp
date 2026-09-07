@@ -12,6 +12,7 @@
 
 // Stub module facades, in startup order.
 #include "network/NetworkManager.h"
+#include "network/StreamerApJoin.h"
 #include "discovery/DiscoveryService.h"
 #include "pairing/PairingService.h"
 #include "pairing/ProvisioningController.h"
@@ -303,6 +304,19 @@ void Application::buildServices() {
       discovery_->startSearching(p.streamer_id, p.streamer_public_key);
     } else if (from == system::toString(system::SystemState::SearchingStreamer)) {
       discovery_->stopSearching();
+    }
+  });
+
+  // On entering CONNECTING_NETWORK, a paired speaker best-effort joins its streamer's private AP
+  // ("Nexus-<streamer_id>"). NotFound (AP not in range) is normal — the usual network path
+  // (persisted profile / ethernet) still applies. See docs/STREAMER-AP-DESIGN.md.
+  bus_.subscribe(core::EventType::StateChanged, [this](const core::Event& e) {
+    if (e.data.value("to", "") != system::toString(system::SystemState::ConnectingNetwork)) return;
+    const auto& p = config_->get().pairing;
+    if (!p.paired || p.streamer_id.empty()) return;
+    const core::Status st = network::joinStreamerAp(*network_, p.streamer_id);
+    if (!st.ok() && st.code() != core::ErrorCode::NotFound) {
+      NX_LOG_WARN("main", "streamer-AP join failed");
     }
   });
 

@@ -35,6 +35,9 @@
 #include "web/WebServer.h"
 #include "web/IWebTransport.h"
 #include "network/NetworkManager.h"
+#include "identity/ApCredentials.h"
+#include "network/INetworkHal.h"
+#include "network/StreamerApJoin.h"
 #include "pairing/PairingService.h"
 #include "status/StatusService.h"
 #include "storage/SecureStorage.h"
@@ -686,4 +689,79 @@ TEST(Integration, Phase9FailedUpdateRollsBack) {
   std::ifstream in(target);
   std::string contents((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
   EXPECT_EQ(contents, "RUNNING_V1");  // rolled back to the working binary
+}
+
+namespace {
+// A network HAL exposing a fixed scan list and recording the last connect — lets the wiring test
+// prove a paired speaker joins its streamer AP when the state machine enters CONNECTING_NETWORK.
+class ApJoinFakeHal : public network::INetworkHal {
+ public:
+  using INetworkHal::connectWifi;
+  explicit ApJoinFakeHal(std::vector<network::WifiNetwork> scan) : scan_(std::move(scan)) {}
+  core::Result<std::vector<network::WifiNetwork>> scanWifi() override { return scan_; }
+  core::Status connectWifi(const network::WifiConnectParams& p) override {
+    last_ssid = p.ssid;
+    last_psk = p.psk;
+    ++calls;
+    connected_ = true;
+    return core::Status::success();
+  }
+  core::Status disconnect() override {
+    connected_ = false;
+    return core::Status::success();
+  }
+  core::Result<network::NetworkStatus> status() override {
+    network::NetworkStatus s;
+    s.connected = connected_;
+    s.mode = connected_ ? "wifi" : "";
+    return s;
+  }
+  std::string last_ssid;
+  std::string last_psk;
+  int calls = 0;
+
+ private:
+  std::vector<network::WifiNetwork> scan_;
+  bool connected_ = false;
+};
+}  // namespace
+
+// Phase A wiring: on entering CONNECTING_NETWORK a paired speaker must auto-JOIN its streamer's
+// private AP ("Nexus-<streamer_id>"). This installs the same StateChanged->joinStreamerAp
+// subscription Application.cpp wires and asserts the join lands on the derived SSID/passphrase.
+TEST(Integration, PairedSpeakerJoinsStreamerApOnConnectingNetwork) {
+  auto dir = sandbox("apjoin");
+  core::EventBus bus;
+  config::ConfigManager config((dir / "config.json").string(), &bus);
+  ASSERT_TRUE(config.start().ok());
+  ASSERT_TRUE(config
+                  .update([](config::SpeakerConfig& c) {
+                    c.pairing.paired = true;
+                    c.pairing.streamer_id = "STR-LAB01";
+                  })
+                  .ok());
+
+  const auto creds = identity::deriveApCredentials("STR-LAB01");
+  auto hal = std::make_unique<ApJoinFakeHal>(
+      std::vector<network::WifiNetwork>{{creds.ssid, -40}, {"Handsome", -60}});
+  auto* raw = hal.get();
+  network::NetworkManager net(&bus, std::move(hal));
+
+  system::SystemManager sys(&bus);
+  ASSERT_TRUE(sys.start().ok());
+
+  // The wiring under test (mirrors Application::buildServices).
+  bus.subscribe(core::EventType::StateChanged, [&](const core::Event& e) {
+    if (e.data.value("to", "") != system::toString(system::SystemState::ConnectingNetwork)) return;
+    const auto& p = config.get().pairing;
+    if (!p.paired || p.streamer_id.empty()) return;
+    network::joinStreamerAp(net, p.streamer_id);
+  });
+
+  sys.enterInitialState(config.get().pairing.paired);  // -> CONNECTING_NETWORK, emits StateChanged
+  bus.drain();
+
+  EXPECT_EQ(raw->calls, 1);
+  EXPECT_EQ(raw->last_ssid, creds.ssid);
+  EXPECT_EQ(raw->last_psk, creds.passphrase);
 }
