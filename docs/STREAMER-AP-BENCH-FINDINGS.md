@@ -17,6 +17,7 @@ speaker1 was deployed, tested, and **rolled back to its prior firmware**; speake
 | **F-B** | Speaker reaches the streamer over mDNS but **stalls in `AUTHENTICATING`** — never reaches `ONLINE`, on *any* network. | HIGH | Discovery end-to-end (independent of AP) |
 | **F-C** | **Streamer identity was regenerated on Aug 29**, silently un-pairing every speaker paired before then (e.g. speaker2). Violates the "identity never regenerates" rule. | HIGH | Field discovery for pre-Aug-29 pairings |
 | F-D | Zero-touch "boot → auto-pair" is not implemented (pairing is operator-initiated from the streamer; unpaired speakers can't self-join the AP). Design-only. | INFO | Future zero-touch provisioning |
+| **F-E** | The pairing layer accepts a peer-supplied `streamer_id` with **no format validation** (`PairingValidator` only checks non-empty). Latent injection/robustness risk for any consumer that trusts the stored value. | MEDIUM | Pairing input hardening |
 
 ---
 
@@ -112,6 +113,22 @@ with a security guard).
 
 ---
 
+## F-E — Pairing accepts an unvalidated `streamer_id` (MEDIUM, from code review)
+
+A speaker's `streamer_id` is copied verbatim from the pairing peer's self-reported field
+(`PairingService::persistPairing`) and `PairingValidator` only rejects it when empty — the Ed25519
+signature proves key possession, not the *content* shape. The streamer always generates
+`STR-<8 lowercase hex>` (`StreamerIdentity`), so anything else is malformed. This surfaced while
+building the boot-join script: `streamer_id` feeds the AP SSID verbatim, and an unsanitized value
+piped into shell would have been a root-RCE at boot. **Mitigated in this change** at both consumer
+points — `nexus-speaker --ap-credentials` fail-closes on a malformed id, and `speaker-ap-join.sh`
+parses (no `eval`) + strictly validates the SSID/passphrase shape. **Recommended systemic fix:**
+validate `streamer_id` against `^STR-[0-9a-f]{8}$` in `PairingValidator`/`persistPairing` so every
+future consumer of the stored value is protected, and audit other peer-supplied fields
+(`streamer_public_key`) similarly.
+
+---
+
 ## Device state after this session
 
 | Host | Firmware | Network | Notes |
@@ -126,8 +143,10 @@ with a security guard).
 
 1. **F-B first** — trace `AUTHENTICATING → ONLINE`. Nothing else matters until a discovered
    speaker can reach `ONLINE` on a normal network.
-2. **F-A** — fix the boot-hotspot/`wlan0` collision + add rescan/retry to `joinStreamerAp`, then
-   re-run the bench (speaker1, then speaker2).
+2. **F-A** — a boot-time join script (`scripts/speaker-ap-join.sh` + `nexus-speaker-ap-join.service`,
+   commit `db2554a`) now claims `wlan0` for the streamer AP **before** `nexus-speaker` starts (so the
+   onboarding hotspot never collides), with 3 bounded retries + last-Wi-Fi fallback. Host-tested;
+   **pending on-device bench** (deploy to one speaker, prove cold boot → lands on 10.42.0.x).
 3. **F-C** — investigate the Aug-29 identity regeneration and re-pair/validate field units.
 4. **F-D** — decide whether zero-touch provisioning is in scope; if so, spec it as new work.
 
@@ -135,4 +154,5 @@ with a security guard).
 
 `a59b1a3` deriveApCredentials · `6c85572` joinStreamerAp · `6995a2b` Application auto-join wiring ·
 `ba2f2d6` `--ap-credentials` CLI · `18a7777` `streamer-ap.sh` · `2c6ca5c` unit + docs ·
-`837ca11` final fixes · `df414f8` AP unit `NEXUS_STREAMER_KEY` fix (caught on device).
+`837ca11` final fixes · `df414f8` AP unit `NEXUS_STREAMER_KEY` fix (caught on device) ·
+`06d2326` these findings · `db2554a` speaker boot-time streamer-AP join (F-A fix, this doc's step 2).
