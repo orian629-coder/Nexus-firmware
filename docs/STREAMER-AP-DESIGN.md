@@ -130,6 +130,7 @@ fallback is designed in. Wired mode has none of these caveats and ships first re
 - **R4 — losing venue-WiFi management access:** moving speakers off venue WiFi changes how they're
   reached for SSH/ops; confirm the ops story (reach speakers via the streamer AP / streamer as a
   jump host) during planning.
+- **R5 — join is best-effort when already connected (Phase A):** the speaker joins Nexus-<streamer_id> only when it enters CONNECTING_NETWORK *not already connected*. A speaker still holding an autoconnecting venue-WiFi profile will stay on it (the join no-ops) rather than migrating — so Phase A assumes speakers have no persisted venue-WiFi profile (spec §2, "off venue WiFi entirely"). Active migration (disconnect venue → join AP) is deferred.
 
 ## 9. Out of scope
 

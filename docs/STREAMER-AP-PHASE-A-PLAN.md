@@ -856,6 +856,7 @@ git commit -m "feat(streamer): nexus-streamer-ap.service unit + install docs for
 - [ ] **Step 1: Get explicit approval and confirm prerequisites**
   - User confirms: proceed on the bench; `streamer` has an ethernet cable to the venue router; pick the test speaker (recommend `speaker2`, the non-critical unit).
   - Confirm all host tasks (1–6) are committed and `feat/streamer-ap` host build + tests are green.
+  - Confirm the test speaker has NO persisted autoconnecting venue-WiFi profile — otherwise it boots already-connected and the AP join no-ops (see design R5). Remove any such profile before the test.
 
 - [ ] **Step 2: Deploy the streamer AP** (on the `streamer` Pi, per `docs/streamer.md`)
   - Rebuild `nexus-streamer` with `-DNEXUS_STUB_HAL=OFF -DNEXUS_BUILD_TESTS=OFF` and install it (this includes the `--ap-credentials` CLI).

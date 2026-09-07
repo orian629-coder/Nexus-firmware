@@ -159,7 +159,7 @@ int main(int argc, char** argv) {
     if (std::string(argv[i]) == "--ap-credentials") {
       nexus::streamer::identity::StreamerIdentity id(identityKeyPath());
       if (const auto st = id.load(); !st.ok()) {
-        std::cerr << "identity load failed: " << st.message() << "\n";
+        std::cerr << "nexus-streamer: identity load failed: " << st.message() << "\n";
         return 1;
       }
       const auto creds = nexus::identity::deriveApCredentials(id.streamerId());
