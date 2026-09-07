@@ -1,6 +1,6 @@
 # The Application library links every module (real + stub), so main and integration tests can
 # bring up the whole system.
-add_library(nexus_app STATIC Application.cpp)
+add_library(nexus_app STATIC Application.cpp ApCredentialsCli.cpp)
 target_include_directories(nexus_app PUBLIC ${NEXUS_SRC_DIR})
 target_link_libraries(nexus_app PUBLIC
   nexus_core
@@ -30,3 +30,12 @@ set_target_properties(nexus_app PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED
 add_executable(nexus-speaker main.cpp)
 target_link_libraries(nexus-speaker PRIVATE nexus_app)
 set_target_properties(nexus-speaker PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+
+# Contract test for the speaker-side --ap-credentials derivation (paired streamer_id -> AP creds).
+if(NEXUS_BUILD_TESTS)
+  add_executable(nexus_speaker_ap_credentials_test
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/unit/speaker_ap_credentials_test.cpp)
+  target_link_libraries(nexus_speaker_ap_credentials_test PRIVATE nexus_app GTest::gtest GTest::gtest_main)
+  set_target_properties(nexus_speaker_ap_credentials_test PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+  gtest_discover_tests(nexus_speaker_ap_credentials_test)
+endif()

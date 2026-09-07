@@ -137,6 +137,16 @@ install -m 0644 "$REPO_ROOT/deploy/nexus-speaker.service" /etc/systemd/system/ne
 systemctl daemon-reload
 systemctl enable nexus-speaker.service
 
+echo "==> Installing the streamer-AP boot join"
+# Runs as root at boot, ordered Before=nexus-speaker.service, so a PAIRED speaker joins the streamer's
+# private AP (Nexus-<streamer_id>, a clean subnet where mDNS works) before the app starts. Unpaired ->
+# the script no-ops and normal onboarding proceeds. See scripts/speaker-ap-join.sh.
+install -m 0755 "$REPO_ROOT/scripts/speaker-ap-join.sh" /usr/local/bin/speaker-ap-join.sh
+install -m 0644 "$REPO_ROOT/deploy/nexus-speaker-ap-join.service" \
+  /etc/systemd/system/nexus-speaker-ap-join.service
+systemctl daemon-reload
+systemctl enable nexus-speaker-ap-join.service
+
 # Raise the ALSA mixer and save it.
 #
 # The card boots at ~78% (-19.88 dB), which is audible but noticeably weak — and on a Pi with no

@@ -1,0 +1,32 @@
+# nexus-speaker-ap-join.service — join the paired streamer's private AP before the speaker app starts.
+#
+# Ordered After=NetworkManager (so nmcli works) and Before=nexus-speaker (so wlan0 is on the streamer
+# AP before the firmware boots — which is what prevents the onboarding setup-hotspot from claiming
+# wlan0 and colliding with the join). See scripts/speaker-ap-join.sh and docs/STREAMER-AP-DESIGN.md.
+#
+#   systemctl enable nexus-speaker-ap-join.service
+#
+# Only acts for a PAIRED speaker; unpaired -> the script no-ops and normal onboarding proceeds.
+
+[Unit]
+Description=Nexus Speaker: join paired streamer AP before app start
+After=NetworkManager.service
+Wants=NetworkManager.service
+Before=nexus-speaker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/speaker-ap-join.sh
+Environment=NEXUS_AP_IFACE=wlan0
+Environment=NEXUS_SPEAKER_BIN=/usr/local/bin/nexus-speaker
+Environment=NEXUS_SPEAKER_CONFIG=/etc/nexus-speaker/config.json
+# Bound total boot delay with real headroom over the script's worst case (retry loop ~53s + a 15s
+# fallback restore + assorted nmcli/iw D-Bus calls). Must exceed that so a timeout never kills the
+# script mid-fallback, which is the one path that keeps a headless unit reachable.
+TimeoutStartSec=120
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=speaker-ap-join
+
+[Install]
+WantedBy=multi-user.target
