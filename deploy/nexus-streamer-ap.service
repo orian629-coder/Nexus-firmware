@@ -1,0 +1,27 @@
+# nexus-streamer-ap.service — permanent private "Nexus-<streamer_id>" Wi-Fi AP for speakers.
+#
+# Brings up the streamer's own WPA2 AP (via scripts/streamer-ap.sh) so speakers join a clean,
+# streamer-controlled subnet where mDNS multicast works. See docs/STREAMER-AP-DESIGN.md. In wired
+# mode the streamer's internet comes from eth0; wlan0 is the AP. Runs as root so nmcli needs no
+# extra polkit grant.
+#
+#   systemctl enable --now nexus-streamer-ap
+
+[Unit]
+Description=Nexus Streamer Private AP
+After=NetworkManager.service nexus-streamer.service
+Wants=NetworkManager.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/nexus-streamer-ap.sh up
+ExecStop=/usr/local/bin/nexus-streamer-ap.sh down
+Environment=NEXUS_AP_IFACE=wlan0
+Environment=NEXUS_STREAMER_BIN=/usr/local/bin/nexus-streamer
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=nexus-streamer-ap
+
+[Install]
+WantedBy=multi-user.target

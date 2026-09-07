@@ -124,7 +124,16 @@ cmake -B build-rpi -DNEXUS_STUB_HAL=OFF -DNEXUS_BUILD_TESTS=OFF && cmake --build
 sudo install -m0755 build-rpi/streamer/nexus-streamer /usr/local/bin/
 sudo install -m0644 deploy/nexus-streamer.service /etc/systemd/system/
 sudo systemctl enable --now nexus-streamer     # control UI on :8090
+
+# Private-AP (Phase A: speakers join Nexus-<streamer_id>). Requires wired eth0 uplink for internet.
+sudo install -m0755 scripts/streamer-ap.sh /usr/local/bin/nexus-streamer-ap.sh
+sudo install -m0644 deploy/nexus-streamer-ap.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now nexus-streamer-ap.service     # brings up Nexus-<streamer_id> on wlan0
 ```
+
+*Bringing up the AP takes `wlan0`; the streamer's internet must come from `eth0` (wired). The no-cable AP+STA 'juggle' fallback is Phase B (spike-gated) — not installed here.*
+
 The audio-send pipeline is launched on demand from a capture source, e.g.
 `pw-record --rate 48000 --channels 2 --format s16 - | nexus-streamer --stream <ips>`.
 
