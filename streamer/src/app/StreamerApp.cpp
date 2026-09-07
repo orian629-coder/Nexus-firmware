@@ -81,6 +81,33 @@ StreamerApp::StreamerApp(const identity::StreamerIdentity& id, control::ILineTra
 
 StreamerApp::~StreamerApp() { shutdown(); }
 
+// The ONE place pair() -> upsert -> persist lives. `params` arrives with everything the CALLER
+// knows (site/name/setup_code/wifi creds/box key); the streamer's own identity is filled in here,
+// never by a caller, because the secret key must never be sourced from outside this process. On
+// success, `stored_host` and `name_for` (given the now-known device_id) decide what gets written to
+// the registry — deliberately parameterized because the onboard-AP flow's rules differ from the
+// auto-pair sweep's (see the two call sites). On failure, the failed/erroring Result is returned
+// as-is and nothing is registered.
+core::Result<pairing::PairingReply> StreamerApp::pairAndRegister(
+    const std::string& connect_host, pairing::PairingParams params, const std::string& stored_host,
+    const std::function<std::string(const std::string& device_id)>& name_for) {
+  params.streamer_id = id_.streamerId();
+  params.streamer_public_key = id_.publicKeyBase64();
+  params.streamer_secret_key = id_.secretKeyBase64();
+  pairing::PairingClient client(line_, connect_host, /*control_port=*/45455);
+  auto reply = client.pair(params);
+  if (!reply.ok() || !reply.value().ok) return reply;
+
+  group::Speaker s;
+  s.device_id = reply.value().device_id;
+  s.name = name_for(s.device_id);
+  s.host = stored_host;
+  s.control_port = 45455;
+  registry_.upsert(s);
+  persist();
+  return reply;
+}
+
 Status StreamerApp::startup() {
   // Config first: the registry, zones, and the web token are all hydrated from it, and everything
   // below depends on those being populated before it starts.
@@ -182,32 +209,26 @@ Status StreamerApp::startup() {
       // IsRegisteredFn: SpeakerRegistry::get() takes its own lock, so no extra guarding is needed
       // here.
       [this](const std::string& device_id) { return registry_.get(device_id).has_value(); },
-      // PairFn: build PairingParams from the streamer's own identity exactly like the onboard-AP
-      // and /api/pair closures above, then run the SAME registry upsert + persist on success.
+      // PairFn: build PairingParams from the attempt, then run the shared pair->upsert->persist
+      // helper (pairAndRegister) — the same one the onboard-AP closure below uses. Unlike that
+      // path, the speaker here is already reachable at `a.host` on the real LAN (found by
+      // browsing, not by joining a temporary setup AP), so it is stored as-is rather than left
+      // empty, and named after its own device_id (no user-supplied name exists for an unattended
+      // pair).
       [this](const provisioning::PairAttempt& a) {
         pairing::PairingParams params;
-        params.streamer_id = id_.streamerId();
-        params.streamer_public_key = id_.publicKeyBase64();
-        params.streamer_secret_key = id_.secretKeyBase64();
         params.site_id = "default";
         params.initial_speaker_name = a.device_id;
         params.speaker_box_public_key = a.box_public_key;
         params.setup_code = a.setup_code;
-        pairing::PairingClient client(line_, a.host, /*control_port=*/45455);
-        auto reply = client.pair(params);
+        auto reply = pairAndRegister(a.host, std::move(params), /*stored_host=*/a.host,
+                                     [](const std::string& device_id) { return device_id; });
         if (!reply.ok() || !reply.value().ok) return false;
 
-        // Unlike the onboard-AP path, the speaker is already reachable at `a.host` on the real LAN
-        // (it was found by browsing, not by joining a temporary setup AP), so recording it now is
-        // correct rather than stale.
-        group::Speaker s;
-        s.device_id = reply.value().device_id;
-        s.name = s.device_id;
-        s.host = a.host;
-        s.control_port = 45455;
-        registry_.upsert(s);
-        persist();
-        std::clog << "[auto-pair] paired " << s.device_id << " at " << epochSeconds()
+        // The audit line is deliberately kept HERE, not inside the shared helper: only the
+        // unattended auto-pair path should announce itself this way, not every operator-initiated
+        // pair that also routes through pairAndRegister.
+        std::clog << "[auto-pair] paired " << reply.value().device_id << " at " << epochSeconds()
                   << " (zero-touch provisioning)\n";
         return true;
       },
@@ -307,34 +328,26 @@ Status StreamerApp::startup() {
           return {{"ok", false}, {"message", "joined the setup network but found no speaker on it"}};
         }
         pairing::PairingParams params;
-        params.streamer_id = id_.streamerId();
-        params.streamer_public_key = id_.publicKeyBase64();
-        params.streamer_secret_key = id_.secretKeyBase64();
         params.site_id = body.value("site_id", "default");
         params.initial_speaker_name = body.value("name", ssid);
         params.setup_code = body.value("setup_code", "");
         params.wifi_ssid = body.value("wifi_ssid", "");
         params.wifi_psk = body.value("wifi_psk", "");
         params.speaker_box_public_key = body.value("box_public_key", "");
-        pairing::PairingClient client(line_, host, /*control_port=*/45455);
-        auto reply = client.pair(params);
+        // Paired. The speaker is now joining the real Wi-Fi and will get a new address there, so
+        // its host is left empty deliberately: the next discovery/scan fills it in. Recording the
+        // AP-side gateway would persist an address that stops existing the moment the AP goes down.
+        auto reply = pairAndRegister(host, std::move(params), /*stored_host=*/"",
+                                     [&](const std::string& device_id) {
+                                       return body.value("name", device_id);
+                                     });
         joiner.leave();  // release the radio before reporting, success or not
 
         if (!reply.ok()) return {{"ok", false}, {"message", reply.status().message()}};
         if (!reply.value().ok) return {{"ok", false}, {"message", reply.value().message}};
 
-        // Paired. The speaker is now joining the real Wi-Fi and will get a new address there, so
-        // its host is left empty deliberately: the next discovery/scan fills it in. Recording the
-        // AP-side gateway would persist an address that stops existing the moment the AP goes down.
-        group::Speaker s;
-        s.device_id = reply.value().device_id;
-        s.name = body.value("name", s.device_id);
-        s.host = "";
-        s.control_port = 45455;
-        registry_.upsert(s);
-        persist();
         return {{"ok", true},
-                {"device_id", s.device_id},
+                {"device_id", reply.value().device_id},
                 {"message", "paired; the speaker is joining the network"}};
       },
       &provisioning_window_);

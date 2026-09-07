@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -21,6 +22,7 @@
 #include "group/ZoneManager.h"
 #include "sources/SourceFactory.h"
 #include "identity/StreamerIdentity.h"
+#include "pairing/PairingClient.h"
 #include "provisioning/AutoPairWorker.h"
 #include "provisioning/ProvisioningWindow.h"
 #include "send/IPacketSink.h"
@@ -119,6 +121,21 @@ class StreamerApp {
  private:
   // Resolves a transport action from the UI into engine calls. Wired into the router.
   core::Status onTransport(const std::string& action, const group::Speaker& target);
+
+  // The one place the pair-then-register sequence lives: fills the streamer's own identity onto
+  // `params` (a caller must never be able to supply it — the secret key never leaves this
+  // process), runs the handshake against `connect_host`, and on success upserts + persists a
+  // registry entry — the same side effect every successful pairing path needs. `stored_host` and
+  // `name_for` let each caller keep its own (slightly different) rules for what gets written to
+  // the registry: the onboard-AP flow deliberately stores an EMPTY host (the speaker is about to
+  // get a new address on the real network) and names the entry from the request body, falling
+  // back to the device_id; the auto-pair sweep stores the host it actually browsed and always
+  // names the entry after its device_id. On failure, returns the failed/erroring result untouched
+  // — no registry write happens.
+  core::Result<pairing::PairingReply> pairAndRegister(
+      const std::string& connect_host, pairing::PairingParams params,
+      const std::string& stored_host,
+      const std::function<std::string(const std::string& device_id)>& name_for);
 
   const identity::StreamerIdentity& id_;
   control::ILineTransport& line_;

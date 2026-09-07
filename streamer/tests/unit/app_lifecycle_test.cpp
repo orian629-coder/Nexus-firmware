@@ -229,8 +229,10 @@ TEST(StreamerApp, AutoPairWorkerStartsAndStopsCleanlyWithWindowClosed) {
   streamer::app::StreamerApp app(*sid.id, line, sink, web, opts);
   ASSERT_TRUE(app.startup().ok());
 
-  // Provisioning window is closed by default — give the sweep thread a couple of its ~3 s wake
-  // intervals to prove it stays quiet rather than crashing or registering anything.
+  // This is a construction/shutdown smoke assertion, not a timing-sensitive wait for the sweep
+  // thread's ~3 s wake interval: the window is closed by default, so sweepOnce() is a no-op
+  // regardless of whether the thread has woken yet by the time this brief pause ends. It just
+  // proves nothing crashes or registers a speaker in the meantime.
   std::this_thread::sleep_for(std::chrono::milliseconds(50));
   EXPECT_EQ(app.registry().size(), 0u) << "no speaker should be auto-paired with the window closed";
 
