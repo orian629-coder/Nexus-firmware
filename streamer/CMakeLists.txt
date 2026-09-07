@@ -198,6 +198,7 @@ target_link_libraries(nexus_streamer_app PUBLIC
   nexus_streamer_pairing
   nexus_streamer_identity
   nexus_streamer_discovery
+  nexus_streamer_provisioning  # AutoPairWorker + ProvisioningWindow (Task 7 background sweep)
   nexus_streamer_scan  # StreamerApp::startup calls scanSubnet/localSubnetOr (NetworkScanner)
   nexus_streamer_wifi  # setup-AP scan + temporary AP join for onboarding a fresh speaker
   nexus_streamer_sources
@@ -384,6 +385,7 @@ if(NEXUS_BUILD_TESTS)
     ${NEXUS_STREAMER_SRC_DIR} ${NEXUS_SRC_DIR})
   target_link_libraries(nexus_streamer_app_test PRIVATE
     nexus_streamer_app
+    nexus_streamer_provisioning  # ProvisioningWindow (Task 7 auto-pair smoke test)
     nexus_control       # real CommandServer + StubCommandTransport
     nexus_audio         # unpackPacket
     nexus_config

@@ -1,6 +1,7 @@
 #include "app/StreamerApp.h"
 
 #include <chrono>
+#include <iostream>
 #include <thread>
 #include <utility>
 
@@ -16,6 +17,9 @@
 #include "discovery/ApScanner.h"
 #include "discovery/NetworkScanner.h"
 #include "identity/Crypto.h"
+#ifdef NEXUS_STREAMER_AVAHI
+#include "discovery/AvahiStreamerDiscovery.h"
+#endif
 
 namespace nexus::streamer::app {
 
@@ -50,11 +54,30 @@ std::pair<int, std::string> speakerHttp(const group::Speaker& target, const std:
 #endif
 }
 
+// The same epoch-seconds expression CommandGateway and StreamerApiRouter already use for
+// command_id / provisioning-window math — reused here rather than inventing new clock semantics.
+std::int64_t epochSeconds() {
+  using namespace std::chrono;
+  return duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
+}
+
+// The zero-touch sweep needs *something* that can browse `_nexus-speaker._tcp` even on a build with
+// no Avahi wired up (host tests, a dev Mac), so it always gets a real object — real mDNS on the Pi,
+// a stub everywhere else. Mirrors how StreamerMain.cpp gates the advertise-side discovery.
+std::unique_ptr<discovery::IStreamerDiscovery> makeAutoPairDiscovery() {
+#ifdef NEXUS_STREAMER_AVAHI
+  return std::make_unique<discovery::AvahiStreamerDiscovery>();
+#else
+  return std::make_unique<discovery::StubStreamerDiscovery>();
+#endif
+}
+
 }  // namespace
 
 StreamerApp::StreamerApp(const identity::StreamerIdentity& id, control::ILineTransport& line,
                          send::IPacketSink& sink, nexus::web::IWebTransport& web, Options options)
-    : id_(id), line_(line), sink_(sink), web_(web), options_(options) {}
+    : id_(id), line_(line), sink_(sink), web_(web), options_(options),
+      autopair_discovery_(makeAutoPairDiscovery()) {}
 
 StreamerApp::~StreamerApp() { shutdown(); }
 
@@ -150,6 +173,61 @@ Status StreamerApp::startup() {
   discovery_ = std::make_unique<discovery::DiscoveryService>(
       options_.discovery, id_.streamerId(), id_.publicKeyBase64(), options_.web_port);
   ordered_.push_back(discovery_.get());
+
+  // Zero-touch provisioning (Task 7): while provisioning_window_ is open, this pairs any speaker the
+  // sweep thread below finds already on the LAN and not yet in the registry, using the exact same
+  // handshake /api/pair uses — the only difference is nobody clicked a button.
+  autopair_worker_ = std::make_unique<provisioning::AutoPairWorker>(
+      *autopair_discovery_, provisioning_window_,
+      // IsRegisteredFn: SpeakerRegistry::get() takes its own lock, so no extra guarding is needed
+      // here.
+      [this](const std::string& device_id) { return registry_.get(device_id).has_value(); },
+      // PairFn: build PairingParams from the streamer's own identity exactly like the onboard-AP
+      // and /api/pair closures above, then run the SAME registry upsert + persist on success.
+      [this](const provisioning::PairAttempt& a) {
+        pairing::PairingParams params;
+        params.streamer_id = id_.streamerId();
+        params.streamer_public_key = id_.publicKeyBase64();
+        params.streamer_secret_key = id_.secretKeyBase64();
+        params.site_id = "default";
+        params.initial_speaker_name = a.device_id;
+        params.speaker_box_public_key = a.box_public_key;
+        params.setup_code = a.setup_code;
+        pairing::PairingClient client(line_, a.host, /*control_port=*/45455);
+        auto reply = client.pair(params);
+        if (!reply.ok() || !reply.value().ok) return false;
+
+        // Unlike the onboard-AP path, the speaker is already reachable at `a.host` on the real LAN
+        // (it was found by browsing, not by joining a temporary setup AP), so recording it now is
+        // correct rather than stale.
+        group::Speaker s;
+        s.device_id = reply.value().device_id;
+        s.name = s.device_id;
+        s.host = a.host;
+        s.control_port = 45455;
+        registry_.upsert(s);
+        persist();
+        std::clog << "[auto-pair] paired " << s.device_id << " at " << epochSeconds()
+                  << " (zero-touch provisioning)\n";
+        return true;
+      },
+      epochSeconds);
+
+  // The sweep is cheap when the window is closed (sweepOnce() returns 0 without touching the
+  // network), so this thread just wakes on a short interval and asks. The condition variable makes
+  // shutdown immediate instead of waiting out a full sleep.
+  autopair_stop_ = false;
+  autopair_thread_ = std::thread([this] {
+    while (!autopair_stop_.load()) {
+      {
+        std::unique_lock<std::mutex> lk(autopair_mutex_);
+        autopair_cv_.wait_for(lk, std::chrono::seconds(3),
+                              [this] { return autopair_stop_.load(); });
+      }
+      if (autopair_stop_.load()) break;
+      autopair_worker_->sweepOnce();
+    }
+  });
 
   for (auto* svc : ordered_) {
     if (auto st = svc->start(); !st.ok()) {
@@ -332,6 +410,17 @@ Status StreamerApp::shutdown() {
   if (web_started_) {
     web_.stop();
     web_started_ = false;
+  }
+  // Stop the sweep thread before anything it reaches through (registry_, config_, line_, id_) starts
+  // coming down. The condition variable makes this immediate rather than waiting out the sweep
+  // interval; idempotent because join() leaves the thread non-joinable.
+  if (autopair_thread_.joinable()) {
+    {
+      std::lock_guard<std::mutex> lk(autopair_mutex_);
+      autopair_stop_ = true;
+    }
+    autopair_cv_.notify_all();
+    autopair_thread_.join();
   }
   // Reverse order, so nothing is torn down while something above it can still call into it.
   for (auto it = started_.rbegin(); it != started_.rend(); ++it) {

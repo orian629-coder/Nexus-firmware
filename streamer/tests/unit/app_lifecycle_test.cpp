@@ -212,6 +212,36 @@ TEST(StreamerApp, ApiRequiresBearerTokenButUiShellIsOpen) {
   app.shutdown();
 }
 
+// Task 7: the auto-pair worker (and its background sweep thread) is wired into every StreamerApp,
+// not just ones that open the provisioning window. This is a construction/shutdown smoke test — the
+// window starts (and stays) closed here, so sweepOnce() is a no-op on every wake, no speaker is
+// discovered or paired, and the thread must still start cleanly and join on shutdown with no crash
+// and no hang. The worker's actual pairing behavior is covered by Task 6's AutoPairWorker tests.
+TEST(StreamerApp, AutoPairWorkerStartsAndStopsCleanlyWithWindowClosed) {
+  StreamerIdentityRig sid("autopair");
+  SpeakerRig rig("autopair", sid.id->publicKeyBase64());
+  LoopbackLineTransport line(rig.transport);
+  streamer::send::MemoryPacketSink sink;
+  nexus::web::StubWebTransport web;
+
+  streamer::app::StreamerApp::Options opts;
+  opts.enable_link_reporter = false;
+  streamer::app::StreamerApp app(*sid.id, line, sink, web, opts);
+  ASSERT_TRUE(app.startup().ok());
+
+  // Provisioning window is closed by default — give the sweep thread a couple of its ~3 s wake
+  // intervals to prove it stays quiet rather than crashing or registering anything.
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  EXPECT_EQ(app.registry().size(), 0u) << "no speaker should be auto-paired with the window closed";
+
+  // Shutdown must stop and join the sweep thread promptly, not hang waiting out its interval.
+  const auto start = std::chrono::steady_clock::now();
+  ASSERT_TRUE(app.shutdown().ok());
+  const auto elapsed = std::chrono::steady_clock::now() - start;
+  EXPECT_LT(elapsed, std::chrono::seconds(2))
+      << "shutdown should join the auto-pair thread immediately via its condition variable";
+}
+
 TEST(StreamerApp, StartStopIsRepeatableAndLeaksNoThreads) {
   StreamerIdentityRig sid("cycle");
   SpeakerRig rig("cycle", sid.id->publicKeyBase64());

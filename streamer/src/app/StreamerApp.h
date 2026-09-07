@@ -1,8 +1,11 @@
 #pragma once
 
 #include <atomic>
+#include <condition_variable>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "app/CommandGateway.h"
@@ -18,6 +21,7 @@
 #include "group/ZoneManager.h"
 #include "sources/SourceFactory.h"
 #include "identity/StreamerIdentity.h"
+#include "provisioning/AutoPairWorker.h"
 #include "provisioning/ProvisioningWindow.h"
 #include "send/IPacketSink.h"
 #include "state/MonitorService.h"
@@ -144,6 +148,22 @@ class StreamerApp {
   std::unique_ptr<nexus::web::Authentication> auth_;
   std::unique_ptr<web::StreamerApiRouter> router_;
   std::string auth_token_;
+
+  // Zero-touch provisioning (Task 7): a dedicated discovery handle for browsing `_nexus-speaker._tcp`
+  // setup beacons — separate from `options_.discovery` (which is only used to ADVERTISE this
+  // streamer and may be null on a dev host with no Avahi wired up). This one is always constructed,
+  // so the sweep thread has something to call even when the window stays closed forever.
+  // Declared BEFORE autopair_worker_ so it outlives the worker on teardown (members are destroyed in
+  // reverse declaration order): the worker holds a reference to it for its whole life.
+  std::unique_ptr<discovery::IStreamerDiscovery> autopair_discovery_;
+  std::unique_ptr<provisioning::AutoPairWorker> autopair_worker_;
+  // Background sweep: wakes every ~3 s (or immediately on shutdown, via the condition variable) and
+  // calls sweepOnce(), which is a no-op the instant the window is closed. Joined in shutdown() before
+  // any member it touches (registry_, config_, line_, id_) is torn down.
+  std::thread autopair_thread_;
+  std::mutex autopair_mutex_;
+  std::condition_variable autopair_cv_;
+  std::atomic<bool> autopair_stop_{false};
 
   // Persist the current registry + zones back to disk. Called only on user-initiated changes —
   // never on state/online updates, which are intentionally ephemeral.
