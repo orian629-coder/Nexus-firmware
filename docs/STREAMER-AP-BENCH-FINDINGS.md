@@ -139,6 +139,17 @@ future consumer of the stored value is protected, and audit other peer-supplied 
 
 ---
 
+## Reboot durability (2026-09-07)
+
+Full simultaneous power-cycle of all three devices (the real "power blip" case). Result: **fleet
+self-healed with zero intervention.** The streamer came back and raised its AP; both speakers
+auto-rejoined within ~46s. Notably, speaker2 booted before the streamer's AP was ready — its
+`speaker-ap-join` logged `attempt 1/3 ... failed`, backed off, and `joined ... on attempt 2` once
+the AP appeared. This validates the retry/backoff design under the race it exists for. (Both then
+progress through discovery to the F-B `AUTHENTICATING` stall.)
+
+---
+
 ## Recommended next steps (priority order)
 
 1. **F-B first** — trace `AUTHENTICATING → ONLINE`. Nothing else matters until a discovered
