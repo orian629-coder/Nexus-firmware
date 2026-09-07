@@ -258,7 +258,8 @@ Status StreamerApp::startup() {
         return {{"ok", true},
                 {"device_id", s.device_id},
                 {"message", "paired; the speaker is joining the network"}};
-      });
+      },
+      &provisioning_window_);
   router_->setSpeakerHttp([](const group::Speaker& target, const std::string& method,
                              const std::string& path, const std::string& payload) {
     return speakerHttp(target, method, path, payload);

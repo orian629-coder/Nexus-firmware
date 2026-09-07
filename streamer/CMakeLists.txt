@@ -156,6 +156,7 @@ target_link_libraries(nexus_streamer_web PUBLIC
   nexus_streamer_pairing   # PairingParams / PairingReply
   nexus_streamer_discovery # DiscoveredSpeaker
   nexus_streamer_sources   # SourceSpec + capture device enumeration for GET /api/sources
+  nexus_streamer_provisioning # ProvisioningWindow (GET/POST /api/provisioning-window)
   nlohmann_json::nlohmann_json)
 if(NEXUS_STREAMER_REAL_NET)
   target_link_libraries(nexus_streamer_web PUBLIC httplib)

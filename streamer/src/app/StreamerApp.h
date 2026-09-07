@@ -18,6 +18,7 @@
 #include "group/ZoneManager.h"
 #include "sources/SourceFactory.h"
 #include "identity/StreamerIdentity.h"
+#include "provisioning/ProvisioningWindow.h"
 #include "send/IPacketSink.h"
 #include "state/MonitorService.h"
 #include "state/SpeakerStateStore.h"
@@ -89,6 +90,9 @@ class StreamerApp {
   core::EventBus& bus() { return bus_; }
   web::StreamerApiRouter& router() { return *router_; }
   streamer::dsp::MasterDsp& masterDsp() { return *master_dsp_; }
+  // Zero-touch provisioning window (Task 4). Shared with the router (GET/POST
+  // /api/provisioning-window) and, from Task 7, the onboarding worker.
+  provisioning::ProvisioningWindow& provisioningWindow() { return provisioning_window_; }
   config::StreamerConfigManager* config() { return config_.get(); }
   const std::string& authToken() const { return auth_token_; }
 
@@ -121,6 +125,9 @@ class StreamerApp {
   core::EventBus bus_;
   group::SpeakerRegistry registry_;
   state::SpeakerStateStore store_{&bus_};
+  // Stable for the app's lifetime: the router holds a raw pointer to it, and Task 7's onboarding
+  // worker will too.
+  provisioning::ProvisioningWindow provisioning_window_;
 
   std::unique_ptr<config::StreamerConfigManager> config_;
   std::unique_ptr<group::ZoneManager> zones_;

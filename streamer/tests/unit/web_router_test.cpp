@@ -20,6 +20,7 @@
 #include "pairing/PairingClient.h"
 #include "pairing/PairingService.h"
 #include "pairing/PairingTypes.h"
+#include "provisioning/ProvisioningWindow.h"
 #include "storage/SecureStorage.h"
 #include "web/StreamerApiRouter.h"
 
@@ -29,6 +30,7 @@ namespace group = nexus::streamer::group;
 namespace swc = nexus::streamer::control;
 namespace swp = nexus::streamer::pairing;
 namespace sweb = nexus::streamer::web;
+namespace swprov = nexus::streamer::provisioning;
 
 namespace {
 
@@ -567,4 +569,85 @@ TEST(WebRouter, FactoryResetNeedsUnpairAcknowledgement) {
                                                            {"acknowledge_unpair", "yes"}}));
   EXPECT_EQ(full.status, 200);
   EXPECT_EQ(*rig.last, "FACTORY_RESET");
+}
+
+// GET /api/provisioning-window before anything has opened it: closed, nothing remaining.
+TEST(WebRouter, ProvisioningWindowGetReportsClosedByDefault) {
+  group::SpeakerRegistry reg;
+  swprov::ProvisioningWindow window;
+  sweb::StreamerApiRouter router(reg,
+                                 [](const group::Speaker&, const std::string&,
+                                    const nlohmann::json&) {
+                                   return core::Result<swc::CommandReply>(swc::CommandReply{});
+                                 },
+                                 /*pairing_sender=*/nullptr, /*discoverer=*/nullptr,
+                                 /*scanner=*/nullptr, /*transport=*/nullptr, /*store=*/nullptr,
+                                 /*auth=*/nullptr, /*ap_scanner=*/nullptr, /*ap_onboarder=*/nullptr,
+                                 &window);
+
+  auto res = router.route(get("/api/provisioning-window"));
+  ASSERT_EQ(res.status, 200) << res.body;
+  auto j = nlohmann::json::parse(res.body);
+  EXPECT_EQ(j["open"], false);
+  EXPECT_EQ(j["seconds_remaining"], 0);
+}
+
+// A router with no window at all (null): the route must fail loudly (503), not pretend to work.
+TEST(WebRouter, ProvisioningWindowUnavailableWithoutOne) {
+  group::SpeakerRegistry reg;
+  sweb::StreamerApiRouter router(reg, [](const group::Speaker&, const std::string&,
+                                        const nlohmann::json&) {
+    return core::Result<swc::CommandReply>(swc::CommandReply{});
+  });
+  EXPECT_EQ(router.route(get("/api/provisioning-window")).status, 503);
+  EXPECT_EQ(router.route(post("/api/provisioning-window", {{"open", true}})).status, 503);
+}
+
+// Full open/close flow: the POST toggle drives the window, a subsequent GET reflects it, the route
+// is covered by the same bearer-auth gate as every other /api/ route, and a malformed ttl is 400.
+TEST(WebRouter, ProvisioningWindowOpenCloseFlowIsGatedAndValidated) {
+  group::SpeakerRegistry reg;
+  swprov::ProvisioningWindow window;
+  nexus::web::Authentication auth("tok-provisioning");
+  sweb::StreamerApiRouter router(reg,
+                                 [](const group::Speaker&, const std::string&,
+                                    const nlohmann::json&) {
+                                   return core::Result<swc::CommandReply>(swc::CommandReply{});
+                                 },
+                                 /*pairing_sender=*/nullptr, /*discoverer=*/nullptr,
+                                 /*scanner=*/nullptr, /*transport=*/nullptr, /*store=*/nullptr,
+                                 &auth, /*ap_scanner=*/nullptr, /*ap_onboarder=*/nullptr, &window);
+
+  // No token at all: proves the router's blanket /api/ gate (route(), cpp:26-32) covers this new
+  // route too, rather than the route having been added outside it by mistake.
+  nexus::web::HttpRequest anon_post{"POST", "/api/provisioning-window",
+                                    nlohmann::json{{"open", true}}.dump(), ""};
+  EXPECT_EQ(router.route(anon_post).status, 401);
+
+  nexus::web::HttpRequest open_req{"POST", "/api/provisioning-window",
+                                   nlohmann::json{{"open", true}, {"ttl", 600}}.dump(),
+                                   "Bearer tok-provisioning"};
+  auto open_res = router.route(open_req);
+  ASSERT_EQ(open_res.status, 200) << open_res.body;
+  auto open_j = nlohmann::json::parse(open_res.body);
+  EXPECT_EQ(open_j["open"], true);
+  EXPECT_GT(open_j["seconds_remaining"].get<int>(), 0);
+  EXPECT_LE(open_j["seconds_remaining"].get<int>(), 600);
+
+  nexus::web::HttpRequest get_req{"GET", "/api/provisioning-window", "", "Bearer tok-provisioning"};
+  auto get_res = router.route(get_req);
+  ASSERT_EQ(get_res.status, 200) << get_res.body;
+  EXPECT_EQ(nlohmann::json::parse(get_res.body)["open"], true);
+
+  nexus::web::HttpRequest close_req{"POST", "/api/provisioning-window",
+                                    nlohmann::json{{"open", false}}.dump(),
+                                    "Bearer tok-provisioning"};
+  auto close_res = router.route(close_req);
+  ASSERT_EQ(close_res.status, 200) << close_res.body;
+  EXPECT_EQ(nlohmann::json::parse(close_res.body)["open"], false);
+
+  nexus::web::HttpRequest bad_ttl_req{"POST", "/api/provisioning-window",
+                                      nlohmann::json{{"open", true}, {"ttl", "x"}}.dump(),
+                                      "Bearer tok-provisioning"};
+  EXPECT_EQ(router.route(bad_ttl_req).status, 400);
 }

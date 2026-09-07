@@ -125,6 +125,16 @@ HttpResponse StreamerApiRouter::handleGet(const std::string& path, const std::st
     if (!levels_) return json(501, {{"error", "levels not available"}});
     return ok(levels_());
   }
+  // Zero-touch provisioning window: whether the streamer is currently accepting a speaker's
+  // unauthenticated pairing offer, and how long that stays true. GET is read-only status; the web-UI
+  // toggle drives it via the POST branch below. Both branches read `now` from the same injected
+  // clock_ so isOpen()/secondsRemaining() can never disagree within one request.
+  if (path == "/api/provisioning-window") {
+    if (!window_) return json(503, {{"error", "provisioning unavailable"}});
+    const auto now = clock_();
+    return json(200, {{"open", window_->isOpen(now)},
+                      {"seconds_remaining", window_->secondsRemaining(now)}});
+  }
   // Control-UI QR: scanning it opens this UI already authenticated, so a phone needs neither the
   // address nor the token typed in. The token is persisted in the streamer config (generated once
   // on first run), so a QR printed today still works after a restart.
@@ -364,6 +374,28 @@ HttpResponse StreamerApiRouter::handlePost(const HttpRequest& req) const {
     if (body.value("wifi_ssid", "").empty()) return badRequest("wifi_ssid required");
     auto res = ap_onboarder_(body);
     return json(res.value("ok", false) ? 200 : 400, res);
+  }
+
+  // Zero-touch provisioning window toggle. {"open":true[,"ttl":600]} opens (or extends) the window;
+  // {"open":false} closes it early. `body` was already parsed (and malformed JSON already rejected)
+  // above, so this reuses it rather than re-parsing req.body — the one-parse-per-request rule every
+  // other POST branch in this function follows.
+  if (p == "/api/provisioning-window") {
+    if (!window_) return json(503, {{"error", "provisioning unavailable"}});
+    if (!body.contains("open") || !body["open"].is_boolean()) return badRequest("missing 'open'");
+    const auto now = clock_();
+    if (body["open"].get<bool>()) {
+      int ttl = 600;
+      if (body.contains("ttl")) {
+        if (!body["ttl"].is_number_integer()) return badRequest("ttl must be an integer");
+        ttl = body["ttl"].get<int>();
+      }
+      window_->open(now, ttl);
+    } else {
+      window_->close();
+    }
+    return json(200, {{"open", window_->isOpen(now)},
+                      {"seconds_remaining", window_->secondsRemaining(now)}});
   }
 
   if (p == "/api/pair") {

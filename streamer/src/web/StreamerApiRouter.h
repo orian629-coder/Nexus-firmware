@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <string>
@@ -11,6 +12,7 @@
 #include "group/SpeakerRegistry.h"
 #include "group/ZoneManager.h"
 #include "pairing/PairingClient.h"
+#include "provisioning/ProvisioningWindow.h"
 #include "sources/SourceFactory.h"
 #include "state/SpeakerStateStore.h"
 #include "web/Authentication.h"
@@ -36,6 +38,8 @@ namespace nexus::streamer::web {
 //   POST /api/transport          → {speaker, action: play|pause|stop}  (START/RESUME/PAUSE/STOP_AUDIO)
 //   POST /api/pair               → pair a new speaker and add it to the registry:
 //        {host, setup_code, box_public_key, wifi_ssid, wifi_psk[, name, site_id]}
+//   GET  /api/provisioning-window  → {open, seconds_remaining}
+//   POST /api/provisioning-window  → {open bool, ttl int(optional, default 600)} → {open, seconds_remaining}
 class StreamerApiRouter {
  public:
   // Sends one command to a speaker and returns the parsed reply. Injected so tests can drive the
@@ -66,6 +70,10 @@ class StreamerApiRouter {
   // with no dependency on the host's ARP table.
   using MacLookup = std::function<std::string(const std::string& ip)>;
 
+  // Returns epoch seconds; injected so tests stay deterministic (same pattern as CommandGateway's
+  // Clock). Used for both branches of /api/provisioning-window so they never disagree about "now".
+  using Clock = std::function<std::int64_t()>;
+
   // Drives the streamer's own audio engine for a transport action ("play"|"pause"|"resume"|"stop")
   // aimed at `target`. This is the seam that makes the play button actually emit audio: before it
   // existed the router only sent a START_AUDIO *command*, and a process serving the UI never sent a
@@ -91,7 +99,8 @@ class StreamerApiRouter {
                     NetworkScanner scanner = nullptr, TransportControl transport = nullptr,
                     const state::SpeakerStateStore* store = nullptr,
                     const nexus::web::Authentication* auth = nullptr,
-                    ApScanner ap_scanner = nullptr, ApOnboarder ap_onboarder = nullptr)
+                    ApScanner ap_scanner = nullptr, ApOnboarder ap_onboarder = nullptr,
+                    provisioning::ProvisioningWindow* window = nullptr, Clock clock = nullptr)
       : registry_(registry),
         sender_(std::move(sender)),
         pairing_sender_(std::move(pairing_sender)),
@@ -101,7 +110,14 @@ class StreamerApiRouter {
         store_(store),
         auth_(auth),
         ap_scanner_(std::move(ap_scanner)),
-        ap_onboarder_(std::move(ap_onboarder)) {}
+        ap_onboarder_(std::move(ap_onboarder)),
+        window_(window),
+        clock_(clock ? std::move(clock)
+                     : Clock([] {
+                         using namespace std::chrono;
+                         return duration_cast<seconds>(system_clock::now().time_since_epoch())
+                             .count();
+                       })) {}
 
   // Starts a zone playing a source. Injected so the router stays a pure function with no dependency
   // on the audio module.
@@ -170,6 +186,12 @@ class StreamerApiRouter {
   // radio, where those two routes report "not available" rather than pretending to work.
   ApScanner ap_scanner_;
   ApOnboarder ap_onboarder_;
+  // Zero-touch provisioning window (Task 4). Null means the feature is unavailable — the route
+  // returns 503 rather than pretending to have a window that does not exist.
+  provisioning::ProvisioningWindow* window_;
+  // Epoch-seconds source shared by both /api/provisioning-window branches. Always non-null after
+  // construction (defaulted above if the caller passes none).
+  Clock clock_;
   MacLookup mac_lookup_;
   group::ZoneManager* zones_ = nullptr;
   SpeakerHttp speaker_http_;
