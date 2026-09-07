@@ -80,6 +80,15 @@ nexus_apply_warnings(nexus_streamer_identity)
 set_target_properties(nexus_streamer_identity PROPERTIES
   CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
 
+# ── streamer provisioning: thread-safe open/close/expiry window for zero-touch provisioning.
+# No nexus dependencies — pure logic (mutex/algorithm/cstdint only). AutoPairWorker.cpp will be
+# added to this same library in a later task. ──
+add_library(nexus_streamer_provisioning STATIC src/provisioning/ProvisioningWindow.cpp)
+target_include_directories(nexus_streamer_provisioning PUBLIC ${NEXUS_STREAMER_SRC_DIR})
+nexus_apply_warnings(nexus_streamer_provisioning)
+set_target_properties(nexus_streamer_provisioning PROPERTIES
+  CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+
 # ── streamer pairing: seal wifi + sign PairingRequest, using shared crypto and PairingTypes ──
 add_library(nexus_streamer_pairing STATIC src/pairing/PairingClient.cpp)
 target_include_directories(nexus_streamer_pairing PUBLIC ${NEXUS_STREAMER_SRC_DIR} ${NEXUS_SRC_DIR})
@@ -308,6 +317,16 @@ if(NEXUS_BUILD_TESTS)
   set_target_properties(nexus_streamer_identity_test PROPERTIES
     CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
   gtest_discover_tests(nexus_streamer_identity_test)
+
+  # Provisioning window: thread-safe open/close/expiry state (zero-touch provisioning).
+  add_executable(nexus_streamer_provisioning_window_test tests/unit/provisioning_window_test.cpp)
+  target_include_directories(nexus_streamer_provisioning_window_test PRIVATE
+    ${NEXUS_STREAMER_SRC_DIR} ${NEXUS_SRC_DIR})
+  target_link_libraries(nexus_streamer_provisioning_window_test PRIVATE
+    nexus_streamer_provisioning GTest::gtest GTest::gtest_main)
+  set_target_properties(nexus_streamer_provisioning_window_test PROPERTIES
+    CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+  gtest_discover_tests(nexus_streamer_provisioning_window_test)
 
   # Contract guard: the streamer must derive AP credentials from the same shared module as the
   # speaker (Task 1's nexus::identity::deriveApCredentials), not a re-implementation.
