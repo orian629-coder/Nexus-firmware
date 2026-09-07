@@ -9,7 +9,7 @@ namespace nexus::streamer::pairing {
 
 // Everything the streamer needs to pair with one speaker during setup.
 struct PairingParams {
-  std::string streamer_id;            // e.g. "STR-LAB01"
+  std::string streamer_id;            // e.g. "STR-1ab01234"
   std::string streamer_public_key;    // base64 Ed25519 (must match the streamer's mDNS record)
   std::string streamer_secret_key;    // base64 Ed25519 secret (signs the request; never sent)
   std::string site_id;

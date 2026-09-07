@@ -56,7 +56,7 @@ class StubDiscoveryHal : public IDiscoveryHal {
   }
   core::Result<std::vector<StreamerRecord>> browseStreamers() override {
     return std::vector<StreamerRecord>{
-        {"STR-LAB01", "streamer.local", 6789, "c3RyZWFtZXItcHVibGljLWtleQ=="}};
+        {"STR-1ab01234", "streamer.local", 6789, "c3RyZWFtZXItcHVibGljLWtleQ=="}};
   }
 
   bool publishing() const { return publishing_; }

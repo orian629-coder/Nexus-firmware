@@ -47,8 +47,8 @@ TEST(DiscoveryService, FindStreamerEmitsFoundOnMatch) {
 
   DiscoveryService disc(&bus);
   disc.start();
-  // StubDiscoveryHal advertises "STR-LAB01".
-  auto rec = disc.findStreamer("STR-LAB01");
+  // StubDiscoveryHal advertises "STR-1ab01234".
+  auto rec = disc.findStreamer("STR-1ab01234");
   bus.drain();
   ASSERT_TRUE(rec.ok());
   EXPECT_EQ(rec.value().host, "streamer.local");
@@ -68,7 +68,7 @@ TEST(DiscoveryService, FindStreamerEmitsLostOnMiss) {
   EXPECT_EQ(lost.load(), 1);
 }
 
-// The key StubDiscoveryHal advertises for STR-LAB01 (see IDiscoveryHal.h).
+// The key StubDiscoveryHal advertises for STR-1ab01234 (see IDiscoveryHal.h).
 namespace {
 constexpr const char* kLabStreamerKey = "c3RyZWFtZXItcHVibGljLWtleQ==";
 
@@ -95,7 +95,7 @@ TEST(DiscoveryService, FindStreamerRejectsPublicKeyMismatch) {
 
   DiscoveryService disc(&bus);
   disc.start();
-  auto rec = disc.findStreamer("STR-LAB01", "not-the-real-key");
+  auto rec = disc.findStreamer("STR-1ab01234", "not-the-real-key");
   bus.drain();
   EXPECT_FALSE(rec.ok());
   EXPECT_EQ(found.load(), 0);
@@ -110,7 +110,7 @@ TEST(DiscoveryService, FindStreamerAcceptsMatchingPublicKey) {
 
   DiscoveryService disc(&bus);
   disc.start();
-  auto rec = disc.findStreamer("STR-LAB01", kLabStreamerKey);
+  auto rec = disc.findStreamer("STR-1ab01234", kLabStreamerKey);
   bus.drain();
   ASSERT_TRUE(rec.ok());
   EXPECT_EQ(rec.value().public_key, kLabStreamerKey);
@@ -126,7 +126,7 @@ TEST(DiscoveryService, StartSearchingFindsStreamerThenStops) {
 
   DiscoveryService disc(&bus);
   disc.start();
-  disc.startSearching("STR-LAB01", kLabStreamerKey, std::chrono::milliseconds(10));
+  disc.startSearching("STR-1ab01234", kLabStreamerKey, std::chrono::milliseconds(10));
 
   ASSERT_TRUE(waitUntil([&] { return found.load() >= 1; }));
   EXPECT_TRUE(waitUntil([&] { return !disc.searching(); }));  // self-stopped after the match

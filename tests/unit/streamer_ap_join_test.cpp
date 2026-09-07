@@ -73,11 +73,11 @@ TEST(JoinStreamerAp, JoinsTheApWhenInRange) {
   core::EventBus bus;
   auto hal = std::make_unique<FakeHal>();
   auto* raw = hal.get();
-  const auto creds = identity::deriveApCredentials("STR-LAB01");
+  const auto creds = identity::deriveApCredentials("STR-1ab01234");
   raw->setScan({{creds.ssid, -40}, {"Handsome", -55}});
   NetworkManager net(&bus, std::move(hal));
 
-  const core::Status st = network::joinStreamerAp(net, "STR-LAB01");
+  const core::Status st = network::joinStreamerAp(net, "STR-1ab01234");
 
   EXPECT_TRUE(st.ok()) << st.message();
   EXPECT_EQ(raw->connectCalls(), 1);
@@ -92,7 +92,7 @@ TEST(JoinStreamerAp, ReturnsNotFoundWhenApAbsent) {
   raw->setScan({{"Handsome", -55}, {"Guest", -70}});
   NetworkManager net(&bus, std::move(hal));
 
-  const core::Status st = network::joinStreamerAp(net, "STR-LAB01");
+  const core::Status st = network::joinStreamerAp(net, "STR-1ab01234");
 
   EXPECT_EQ(st.code(), core::ErrorCode::NotFound);
   EXPECT_EQ(raw->connectCalls(), 0);
@@ -112,7 +112,7 @@ TEST(JoinStreamerAp, NoOpWhenAlreadyConnected) {
   NetworkManager net(&bus, std::move(hal));
   net.refresh();  // pull HAL status into the manager's cache so isConnected() is true
 
-  const core::Status st = network::joinStreamerAp(net, "STR-LAB01");
+  const core::Status st = network::joinStreamerAp(net, "STR-1ab01234");
 
   EXPECT_TRUE(st.ok());
   EXPECT_EQ(raw->connectCalls(), 0);

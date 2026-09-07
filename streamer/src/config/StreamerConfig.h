@@ -13,7 +13,7 @@ namespace nexus::streamer::config {
 // still yields a usable object. Mirrors the speaker's config/SpeakerConfig.h conventions.
 
 struct IdentityConfig {
-  std::string streamer_id;    // e.g. "STR-LAB01"; advertised in mDNS and used as target/site key
+  std::string streamer_id;    // e.g. "STR-1ab01234"; advertised in mDNS and used as target/site key
   std::string public_key;     // base64 Ed25519 public key — safe to persist; sent during pairing
   std::string site_id;        // logical site/home this streamer manages
 };

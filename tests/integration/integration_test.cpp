@@ -140,7 +140,7 @@ TEST(Integration, Phase2OnboardingReachesOnline) {
   ASSERT_EQ(sys.states().current(), system::SystemState::Unconfigured);
   ASSERT_TRUE(sys.states().transitionTo(system::SystemState::SetupMode, "user setup").ok());
 
-  // Build a fake streamer whose id matches the one StubDiscoveryHal advertises ("STR-LAB01").
+  // Build a fake streamer whose id matches the one StubDiscoveryHal advertises ("STR-1ab01234").
   std::vector<std::uint8_t> spk(crypto_sign_PUBLICKEYBYTES), ssk(crypto_sign_SECRETKEYBYTES);
   crypto_sign_keypair(spk.data(), ssk.data());
 
@@ -149,7 +149,7 @@ TEST(Integration, Phase2OnboardingReachesOnline) {
   auto boxpubbin = identity::crypto::fromBase64(boxpub.value());
 
   pairing::PairingRequest req;
-  req.streamer_id = "STR-LAB01";
+  req.streamer_id = "STR-1ab01234";
   req.streamer_public_key = identity::crypto::toBase64(spk);
   req.site_id = "site-1";
   req.initial_speaker_name = "Kitchen";
@@ -200,7 +200,7 @@ TEST(Integration, Phase2OnboardingReachesOnline) {
 // AUTOMATICALLY — no manual findStreamer() call — and advance to AUTHENTICATING. Before this
 // wiring, DiscoveryService::findStreamer() had no caller and a paired device sat in
 // SEARCHING_STREAMER forever. This test installs the same StateChanged→startSearching subscription
-// that Application.cpp wires, and asserts the auto-advance. The stub HAL advertises "STR-LAB01".
+// that Application.cpp wires, and asserts the auto-advance. The stub HAL advertises "STR-1ab01234".
 TEST(Integration, PairedSpeakerAutoDiscoversStreamerFromStateWiring) {
   auto dir = sandbox("autodisc");
   core::EventBus bus;
@@ -209,7 +209,7 @@ TEST(Integration, PairedSpeakerAutoDiscoversStreamerFromStateWiring) {
   ASSERT_TRUE(config
                   .update([](config::SpeakerConfig& c) {
                     c.pairing.paired = true;
-                    c.pairing.streamer_id = "STR-LAB01";  // matches StubDiscoveryHal
+                    c.pairing.streamer_id = "STR-1ab01234";  // matches StubDiscoveryHal
                     c.pairing.streamer_public_key = "c3RyZWFtZXItcHVibGljLWtleQ==";
                   })
                   .ok());
@@ -737,11 +737,11 @@ TEST(Integration, PairedSpeakerJoinsStreamerApOnConnectingNetwork) {
   ASSERT_TRUE(config
                   .update([](config::SpeakerConfig& c) {
                     c.pairing.paired = true;
-                    c.pairing.streamer_id = "STR-LAB01";
+                    c.pairing.streamer_id = "STR-1ab01234";
                   })
                   .ok());
 
-  const auto creds = identity::deriveApCredentials("STR-LAB01");
+  const auto creds = identity::deriveApCredentials("STR-1ab01234");
   auto hal = std::make_unique<ApJoinFakeHal>(
       std::vector<network::WifiNetwork>{{creds.ssid, -40}, {"Handsome", -60}});
   auto* raw = hal.get();

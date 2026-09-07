@@ -16,13 +16,13 @@ TEST(StreamerDiscovery, AdvertiseRecordsServiceFields) {
   EXPECT_FALSE(disc.advertising());
 
   StreamerAdvertisement ad;
-  ad.streamer_id = "STR-LAB01";
+  ad.streamer_id = "STR-1ab01234";
   ad.public_key = "cGstYjY0";
   ad.port = 6789;
   ASSERT_TRUE(disc.advertise(ad).ok());
 
   EXPECT_TRUE(disc.advertising());
-  EXPECT_EQ(disc.advertised().streamer_id, "STR-LAB01");
+  EXPECT_EQ(disc.advertised().streamer_id, "STR-1ab01234");
   EXPECT_EQ(disc.advertised().public_key, "cGstYjY0");
 
   ASSERT_TRUE(disc.stopAdvertising().ok());
@@ -46,13 +46,13 @@ TEST(StreamerDiscovery, BrowseYieldsPairableSpeakerBeacon) {
 // speaker able to find it), publishing the streamer_id/public_key/port, and clear it on stop.
 TEST(StreamerDiscoveryService, StartAdvertisesAndStopClears) {
   auto stub = std::make_shared<StubStreamerDiscovery>();
-  DiscoveryService svc(stub, "STR-LAB01", "cGstYjY0", 8090);
+  DiscoveryService svc(stub, "STR-1ab01234", "cGstYjY0", 8090);
   EXPECT_FALSE(stub->advertising());
 
   ASSERT_TRUE(svc.start().ok());
   EXPECT_EQ(svc.state(), ServiceState::Running);
   EXPECT_TRUE(stub->advertising());
-  EXPECT_EQ(stub->advertised().streamer_id, "STR-LAB01");
+  EXPECT_EQ(stub->advertised().streamer_id, "STR-1ab01234");
   EXPECT_EQ(stub->advertised().public_key, "cGstYjY0");
   EXPECT_EQ(stub->advertised().port, 8090);
 
@@ -64,7 +64,7 @@ TEST(StreamerDiscoveryService, StartAdvertisesAndStopClears) {
 // A build with no mDNS backend (null discovery) must not fail startup — the streamer still runs and
 // speakers can be added by address; the service reports Degraded rather than erroring.
 TEST(StreamerDiscoveryService, NullDiscoveryStartsDegraded) {
-  DiscoveryService svc(nullptr, "STR-LAB01", "cGstYjY0", 8090);
+  DiscoveryService svc(nullptr, "STR-1ab01234", "cGstYjY0", 8090);
   ASSERT_TRUE(svc.start().ok());
   EXPECT_EQ(svc.state(), ServiceState::Degraded);
 }
