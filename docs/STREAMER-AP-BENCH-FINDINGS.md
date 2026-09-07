@@ -135,7 +135,7 @@ future consumer of the stored value is protected, and audit other peer-supplied 
 |------|----------|---------|-------|
 | streamer (`STR-a14ad83e`) | New (`--ap-credentials`), **left in place** | `wlan0` = AP `Nexus-STR-a14ad83e` (10.42.0.1), eth0 internet | `nexus-streamer-ap.service` enabled + active. **Can be rolled back on request** (disable AP, restore old binary, return wlan0 to venue). |
 | speaker1 (`SPK-B11A8272`) | Boot-join firmware (`951c734d…`) + `speaker-ap-join` enabled | **On the streamer AP** (`10.42.0.50`), reachable via the streamer | Boot-join proven: joined `Nexus-STR-a14ad83e` on attempt 1 before the app started (no hotspot collision); sits at `AUTHENTICATING` (F-B). venue kept as fallback. |
-| speaker2 (`SPK-0AA84BEB`) | Untouched (stale) | Venue Wi-Fi (`192.168.1.20`) | Still paired to the **dead** `STR-15446c90` (see F-C). |
+| speaker2 (`SPK-0AA84BEB`) | Boot-join firmware (`951c734d…`) + `speaker-ap-join` enabled; **re-paired** to `STR-a14ad83e` | **On the streamer AP** (`10.42.0.28`), reachable via the streamer | Joined on attempt 1 before the app (like speaker1); sits at `AUTHENTICATING`. Re-pair fixed F-C for this unit. venue kept as fallback. |
 
 ---
 
