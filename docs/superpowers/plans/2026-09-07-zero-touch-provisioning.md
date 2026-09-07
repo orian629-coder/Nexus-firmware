@@ -552,7 +552,7 @@ Model the request/response construction on the existing cases in that file (reus
 
 - [ ] **Step 2: Run it, verify it fails**
 
-Run: `/usr/bin/ctest --test-dir build -R WebServer -V`
+Run: `/usr/bin/ctest --test-dir build -R WebRouter -V`
 Expected: FAIL — route returns 404/unknown today.
 
 - [ ] **Step 3: Thread ProvisioningWindow into the router**
@@ -604,7 +604,7 @@ In `streamer/src/app/StreamerApp.cpp`, add a `provisioning::ProvisioningWindow p
 
 - [ ] **Step 6: Build + run, verify PASS**
 
-Run: `cmake --build build && /usr/bin/ctest --test-dir build -R WebServer -V`
+Run: `cmake --build build && /usr/bin/ctest --test-dir build -R WebRouter -V`
 Expected: PASS.
 
 - [ ] **Step 7: Commit**
