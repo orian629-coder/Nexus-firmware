@@ -134,7 +134,7 @@ future consumer of the stored value is protected, and audit other peer-supplied 
 | Host | Firmware | Network | Notes |
 |------|----------|---------|-------|
 | streamer (`STR-a14ad83e`) | New (`--ap-credentials`), **left in place** | `wlan0` = AP `Nexus-STR-a14ad83e` (10.42.0.1), eth0 internet | `nexus-streamer-ap.service` enabled + active. **Can be rolled back on request** (disable AP, restore old binary, return wlan0 to venue). |
-| speaker1 (`SPK-B11A8272`) | **Rolled back** to pre-session binary (`1bfe7c36…`) | Venue Wi-Fi (`192.168.1.238`), autoconnect restored | Safety-net scaffolding removed. Back to prior behavior (`SEARCHING_STREAMER`). |
+| speaker1 (`SPK-B11A8272`) | Boot-join firmware (`951c734d…`) + `speaker-ap-join` enabled | **On the streamer AP** (`10.42.0.50`), reachable via the streamer | Boot-join proven: joined `Nexus-STR-a14ad83e` on attempt 1 before the app started (no hotspot collision); sits at `AUTHENTICATING` (F-B). venue kept as fallback. |
 | speaker2 (`SPK-0AA84BEB`) | Untouched (stale) | Venue Wi-Fi (`192.168.1.20`) | Still paired to the **dead** `STR-15446c90` (see F-C). |
 
 ---
@@ -145,8 +145,10 @@ future consumer of the stored value is protected, and audit other peer-supplied 
    speaker can reach `ONLINE` on a normal network.
 2. **F-A** — a boot-time join script (`scripts/speaker-ap-join.sh` + `nexus-speaker-ap-join.service`,
    commit `db2554a`) now claims `wlan0` for the streamer AP **before** `nexus-speaker` starts (so the
-   onboarding hotspot never collides), with 3 bounded retries + last-Wi-Fi fallback. Host-tested;
-   **pending on-device bench** (deploy to one speaker, prove cold boot → lands on 10.42.0.x).
+   onboarding hotspot never collides), with 3 bounded retries + last-Wi-Fi fallback.
+   **PROVEN on device (2026-09-07):** speaker1 cold-booted, `speaker-ap-join` joined the AP on
+   attempt 1 before the app started (no hotspot collision), landed on `10.42.0.50`, and is reachable
+   via the streamer. Remaining: F-B (still `AUTHENTICATING`), then replicate to speaker2 (needs re-pair).
 3. **F-C** — investigate the Aug-29 identity regeneration and re-pair/validate field units.
 4. **F-D** — decide whether zero-touch provisioning is in scope; if so, spec it as new work.
 
