@@ -28,6 +28,10 @@ gtest_discover_tests(nexus_scenario_test)
 add_test(NAME script_reset_preserves_identity
          COMMAND ${CMAKE_COMMAND} -E env bash ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_reset.sh)
 
+# Script tests (bash): unpaired speaker selects strongest in-range Nexus streamer AP.
+add_test(NAME script_speaker_ap_join_select
+         COMMAND bash ${CMAKE_SOURCE_DIR}/tests/scripts/speaker-ap-join-select.bats.sh)
+
 # Hardware tests are gated off by default (require real audio/thermal devices on the Pi).
 if(NEXUS_HW_TESTS)
   add_executable(nexus_hw_test hardware/hardware_test.cpp)

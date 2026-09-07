@@ -26,9 +26,23 @@ WAIT="${NEXUS_AP_WAIT:-15}"
 
 log() { logger -t speaker-ap-join -- "$*" 2>/dev/null || true; echo "speaker-ap-join: $*"; }
 
+# Print the strongest-signal SSID matching a Nexus streamer AP, or nothing.
+# Input: `nmcli -t -f SSID,SIGNAL dev wifi` style "SSID:SIGNAL" lines on stdin.
+# Isolated so a future version can swap in a multi-tenant selection strategy.
+select_streamer_ap() {
+  awk -F: '
+    $1 ~ /^Nexus-STR-[0-9a-f]{8}$/ {
+      sig = $2 + 0
+      if (sig > best_sig) { best_sig = sig; best = $1 }
+    }
+    END { if (best != "") print best }
+  '
+}
+
 # Fallback target, captured before we change anything so we can always get back on the air.
 LAST_WIFI=""
 restore_last_wifi() {
+  if [ "${UNPAIRED:-0}" = "1" ]; then log "unpaired — staying on AP attempt, no Wi-Fi fallback"; return 0; fi
   if [ -n "${LAST_WIFI:-}" ]; then
     log "restoring last Wi-Fi (${LAST_WIFI})"
     nmcli -w "$WAIT" connection up "$LAST_WIFI" ifname "$IFACE" >/dev/null 2>&1 || true
@@ -38,9 +52,18 @@ restore_last_wifi() {
 }
 
 # 1. Derive the paired streamer's AP credentials (single source of truth = the binary).
+#    If not paired, scan for the strongest in-range Nexus streamer AP and derive creds for it
+#    instead (zero-touch bootstrap); if that also fails, no-op and let normal onboarding proceed.
 if ! creds="$("$BIN" --config "$CONFIG" --ap-credentials 2>/dev/null)"; then
-  log "not paired / no streamer AP credentials — skipping (normal onboarding proceeds)"
-  exit 0
+  log "not paired — trying unpaired streamer-AP bootstrap"
+  nmcli -w 10 device wifi rescan ifname "$IFACE" >/dev/null 2>&1 || true
+  target_ssid="$(nmcli -t -f SSID,SIGNAL dev wifi list ifname "$IFACE" 2>/dev/null | select_streamer_ap || true)"
+  if [ -z "$target_ssid" ]; then log "no Nexus streamer AP in range — nothing to join"; exit 0; fi
+  log "found streamer AP ${target_ssid} — deriving creds"
+  if ! creds="$("$BIN" --config "$CONFIG" --ap-credentials-for-ssid "$target_ssid" 2>/dev/null)"; then
+    log "could not derive creds for ${target_ssid}"; exit 0
+  fi
+  UNPAIRED=1   # while unpaired, do NOT fall back to last-Wi-Fi; stay on the AP
 fi
 
 # 2. Parse WITHOUT eval, then strictly validate shape. The binary already fail-closes on a malformed
