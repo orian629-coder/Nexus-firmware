@@ -19,6 +19,10 @@ ExecStart=/usr/local/bin/nexus-streamer-ap.sh up
 ExecStop=/usr/local/bin/nexus-streamer-ap.sh down
 Environment=NEXUS_AP_IFACE=wlan0
 Environment=NEXUS_STREAMER_BIN=/usr/local/bin/nexus-streamer
+# The script shells out to `nexus-streamer --ap-credentials`, which loads the identity key to derive
+# the SSID/passphrase. This unit runs as root (HOME=/root), so it must point the binary at the real
+# key path — the same one nexus-streamer.service uses — or identity load fails and the AP won't start.
+Environment=NEXUS_STREAMER_KEY=/var/lib/nexus-streamer/identity.key
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=nexus-streamer-ap
