@@ -15,7 +15,9 @@
 - **Branch:** all work on `feat/streamer-ap`. Small, reviewed, frequent commits. Never commit to `master`.
 - **Discovery wire contract is FROZEN** (`CLAUDE.md`): `_nexus-streamer._tcp`:8090, `_nexus-speaker._tcp`:45455, control TCP 45455, audio UDP 50005, and all TXT keys. This feature adds NO new wire fields and changes NO existing one. If you think you need to, stop and escalate.
 - **Identity generation/storage is off-limits.** Do not touch identity provisioning, key material, or the `device_id`/`streamer_id` derivation. This plan only *reads and validates* them.
-- **Host build must be green before any deploy:** configure with preset `host-debug` (`-DNEXUS_STUB_HAL=ON -DNEXUS_BUILD_TESTS=ON`), build, and run `/usr/bin/ctest`. Do NOT run the full-Application end-to-end tests locally (they raise polkit GUI password dialogs) — run the specific unit tests each task names.
+- **Host build must be green before any deploy:** the `build/` dir is already configured (stub HAL, tests ON); build with `cmake --build build` and run `/usr/bin/ctest --test-dir build`. Do NOT run the full-Application end-to-end tests locally (they raise polkit GUI password dialogs) — run the specific unit tests each task names.
+- **ctest filter naming:** tests register via `gtest_discover_tests` under their **GTest suite name** (e.g. `SpeakerApCredentials.*`, `Pairing.*`, `WebServer.*`), and `ctest -R` is a **case-sensitive** regex over those names — NOT the target/file name. If a `-R` run prints `No tests were found!!!` it ran **nothing** and still exits 0 — that is a filter mismatch, never a pass. Always confirm a non-zero test count. Use `/usr/bin/ctest --test-dir build -N | grep <Suite>` to find the exact name.
+- **Streamer libraries are per-module** (`nexus_streamer_identity`, `nexus_streamer_discovery`, `nexus_streamer_pairing`, `nexus_streamer_control`, `nexus_streamer_app`, …) — there is NO single streamer "core" lib. New streamer sources go into a new/appropriate per-module `add_library`, and test/app targets link the specific libs they use, following the existing pattern in `streamer/CMakeLists.txt`.
 - **No device deploy/flash.** These are client units; the on-device bench is a separately gated human-approved step, not part of this plan's execution.
 - **Fail-closed on peer-supplied data.** Any `streamer_id`/SSID coming from the wire or a scan is validated against `^STR-[0-9a-f]{8}$` / `^Nexus-STR-[0-9a-f]{8}$` before use. No `eval`, no unquoted shell interpolation.
 - **Security posture:** the provisioning window is the sole real guard. Keep the setup-code reconstruction isolated in one named function so a future rotating-code scheme can replace it without touching the window or worker.
@@ -95,7 +97,7 @@ In `tests/unit/pairing_test.cpp`, add a case that builds a `PairingRequest` whic
 
 - [ ] **Step 6: Run it, verify it fails**
 
-Run: `/usr/bin/ctest --test-dir build -R pairing -V` (target `nexus_pairing_test` or as named in `src/pairing/CMakeLists.txt`)
+Run: `/usr/bin/ctest --test-dir build -R Pairing -V` (GTest suite `Pairing.*`)
 Expected: FAIL — malformed id currently accepted.
 
 - [ ] **Step 7: Enforce the validator in PairingValidator**
@@ -115,8 +117,8 @@ In `src/main/ApCredentialsCli.cpp`, delete the private `isWellFormedStreamerId` 
 
 - [ ] **Step 9: Run the full affected suite, verify PASS**
 
-Run: `/usr/bin/ctest --test-dir build -R "ApCredentials|pairing|speaker_ap_credentials" -V`
-Expected: all PASS.
+Run: `/usr/bin/ctest --test-dir build -R "ApCredentials|Pairing|SpeakerApCredentials" -V`
+Expected: all PASS (confirm the count is non-zero, not "No tests were found").
 
 - [ ] **Step 10: Commit**
 
@@ -169,7 +171,7 @@ TEST(SpeakerApCredentials, ForSsidRejectsMalformedAndForeign) {
 
 - [ ] **Step 2: Run it, verify it fails**
 
-Run: `/usr/bin/ctest --test-dir build -R speaker_ap_credentials -V`
+Run: `/usr/bin/ctest --test-dir build -R SpeakerApCredentials -V`
 Expected: FAIL — `apCredentialsForSsid` not declared.
 
 - [ ] **Step 3: Declare and implement**
@@ -200,7 +202,7 @@ std::optional<nexus::identity::ApCredentials> apCredentialsForSsid(const std::st
 
 - [ ] **Step 4: Run it, verify PASS**
 
-Run: `/usr/bin/ctest --test-dir build -R speaker_ap_credentials -V`
+Run: `/usr/bin/ctest --test-dir build -R SpeakerApCredentials -V`
 Expected: PASS.
 
 - [ ] **Step 5: Wire the CLI flag in main.cpp**
@@ -229,7 +231,7 @@ if (want_ap_credentials_for_ssid) {
 
 - [ ] **Step 6: Build host, verify the binary links and the suite passes**
 
-Run: `cmake --build build --target nexus-speaker nexus_speaker_ap_credentials_test && /usr/bin/ctest --test-dir build -R speaker_ap_credentials -V`
+Run: `cmake --build build --target nexus-speaker nexus_speaker_ap_credentials_test && /usr/bin/ctest --test-dir build -R SpeakerApCredentials -V`
 Expected: builds; tests PASS.
 
 - [ ] **Step 7: Commit**
@@ -433,7 +435,7 @@ TEST(ProvisioningWindow, TtlClamped) {
 
 - [ ] **Step 2: Run it, verify it fails**
 
-Run: `/usr/bin/ctest --test-dir build -R provisioning_window -V`
+Run: `/usr/bin/ctest --test-dir build -R ProvisioningWindow -V`
 Expected: FAIL — header/target missing.
 
 - [ ] **Step 3: Implement the class**
@@ -491,19 +493,25 @@ int ProvisioningWindow::secondsRemaining(std::int64_t now_epoch) const {
 
 - [ ] **Step 4: Register in CMake**
 
-In `streamer/CMakeLists.txt`: add `src/provisioning/ProvisioningWindow.cpp` to the streamer core library sources (same library the other `streamer/src/**` files compile into). Then, guarded by the same `if(NEXUS_BUILD_TESTS)` block as the neighbors, add:
+In `streamer/CMakeLists.txt`, follow the **per-module library** pattern (there is no single core lib). Create a new module library for provisioning and register the test, guarded by the same `if(NEXUS_BUILD_TESTS)` block the neighbors use:
 
 ```cmake
-  add_executable(nexus_streamer_provisioning_window_test tests/unit/provisioning_window_test.cpp)
-  target_link_libraries(nexus_streamer_provisioning_window_test PRIVATE <streamer_core_lib> GTest::gtest GTest::gtest_main)
-  gtest_discover_tests(nexus_streamer_provisioning_window_test)
+add_library(nexus_streamer_provisioning STATIC src/provisioning/ProvisioningWindow.cpp)
+target_include_directories(nexus_streamer_provisioning PUBLIC src)   # match how neighbor libs expose streamer/src
+target_link_libraries(nexus_streamer_provisioning PUBLIC nexus_core) # for std types/Result if needed; mirror a neighbor lib
+
+# ... inside the if(NEXUS_BUILD_TESTS) block, alongside nexus_streamer_identity_test:
+add_executable(nexus_streamer_provisioning_window_test tests/unit/provisioning_window_test.cpp)
+target_include_directories(nexus_streamer_provisioning_window_test PRIVATE src)
+target_link_libraries(nexus_streamer_provisioning_window_test PRIVATE nexus_streamer_provisioning GTest::gtest GTest::gtest_main)
+gtest_discover_tests(nexus_streamer_provisioning_window_test)
 ```
 
-(Replace `<streamer_core_lib>` with the actual streamer library target name used by `nexus_streamer_identity_test` — read it from the neighbor at line ~305-310. Ensure `target_include_directories` gives access to `streamer/src` as the neighbors do.)
+(Copy the exact `target_include_directories`/`set_target_properties` lines from the `nexus_streamer_identity_test` neighbor at streamer/CMakeLists.txt:~304-311 so include paths and C++ standard match. `AutoPairWorker.cpp` will be added to this same `nexus_streamer_provisioning` library in Task 6.)
 
 - [ ] **Step 5: Build + run, verify PASS**
 
-Run: `cmake --build build --target nexus_streamer_provisioning_window_test && /usr/bin/ctest --test-dir build -R provisioning_window -V`
+Run: `cmake --build build --target nexus_streamer_provisioning_window_test && /usr/bin/ctest --test-dir build -R ProvisioningWindow -V`
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
@@ -544,7 +552,7 @@ Model the request/response construction on the existing cases in that file (reus
 
 - [ ] **Step 2: Run it, verify it fails**
 
-Run: `/usr/bin/ctest --test-dir build -R streamer_web -V`
+Run: `/usr/bin/ctest --test-dir build -R WebServer -V`
 Expected: FAIL — route returns 404/unknown today.
 
 - [ ] **Step 3: Thread ProvisioningWindow into the router**
@@ -596,7 +604,7 @@ In `streamer/src/app/StreamerApp.cpp`, add a `provisioning::ProvisioningWindow p
 
 - [ ] **Step 6: Build + run, verify PASS**
 
-Run: `cmake --build build && /usr/bin/ctest --test-dir build -R streamer_web -V`
+Run: `cmake --build build && /usr/bin/ctest --test-dir build -R WebServer -V`
 Expected: PASS.
 
 - [ ] **Step 7: Commit**
@@ -701,7 +709,7 @@ TEST(AutoPairWorker, SkipsNonSetupModeAndBadIds) {
 
 - [ ] **Step 2: Run it, verify it fails**
 
-Run: `/usr/bin/ctest --test-dir build -R "auto_pair_worker|DeriveSetupCode" -V`
+Run: `/usr/bin/ctest --test-dir build -R "AutoPairWorker|DeriveSetupCode" -V`
 Expected: FAIL — header/target missing.
 
 - [ ] **Step 3: Implement `AutoPairWorker`**
@@ -778,11 +786,25 @@ int AutoPairWorker::sweepOnce() {
 
 - [ ] **Step 4: Register in CMake**
 
-In `streamer/CMakeLists.txt`: add `src/provisioning/AutoPairWorker.cpp` to the streamer core lib sources; add the `nexus_streamer_auto_pair_worker_test` executable linking that lib + GTest, with `gtest_discover_tests`, guarded by `NEXUS_BUILD_TESTS`.
+In `streamer/CMakeLists.txt`: add `src/provisioning/AutoPairWorker.cpp` to the **`nexus_streamer_provisioning`** library created in Task 4, and make that library link the discovery module (it now consumes `IStreamerDiscovery`/`DiscoveredSpeaker`):
+
+```cmake
+# extend the existing add_library from Task 4:
+add_library(nexus_streamer_provisioning STATIC src/provisioning/ProvisioningWindow.cpp src/provisioning/AutoPairWorker.cpp)
+target_link_libraries(nexus_streamer_provisioning PUBLIC nexus_streamer_discovery nexus_core)
+
+# inside if(NEXUS_BUILD_TESTS):
+add_executable(nexus_streamer_auto_pair_worker_test tests/unit/auto_pair_worker_test.cpp)
+target_include_directories(nexus_streamer_auto_pair_worker_test PRIVATE src)
+target_link_libraries(nexus_streamer_auto_pair_worker_test PRIVATE nexus_streamer_provisioning nexus_streamer_discovery GTest::gtest GTest::gtest_main)
+gtest_discover_tests(nexus_streamer_auto_pair_worker_test)
+```
+
+(Confirm the discovery module's real target name from the `nexus_streamer_discovery_test` neighbor at streamer/CMakeLists.txt:~325-329 — it links `nexus_streamer_discovery nexus_core`.)
 
 - [ ] **Step 5: Build + run, verify PASS**
 
-Run: `cmake --build build --target nexus_streamer_auto_pair_worker_test && /usr/bin/ctest --test-dir build -R "auto_pair_worker|DeriveSetupCode" -V`
+Run: `cmake --build build --target nexus_streamer_auto_pair_worker_test && /usr/bin/ctest --test-dir build -R "AutoPairWorker|DeriveSetupCode" -V`
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
@@ -801,8 +823,8 @@ Connects the worker to the real discovery impl, the real `PairingClient` handsha
 
 **Files:**
 - Modify: `streamer/src/app/StreamerApp.cpp` (construct discovery, build the `PairFn` around `PairingClient`, build the `IsRegisteredFn` over the registry, start/stop a sweep thread)
-- Modify: `streamer/CMakeLists.txt` only if a new link dependency is needed
-- Test: extend `nexus_streamer_app_test` with a construction/smoke assertion (no real network)
+- Modify: `streamer/CMakeLists.txt` — make the `nexus_streamer_app` library (and the `nexus_streamer_app_test` target) link `nexus_streamer_provisioning`; add other module deps (`nexus_streamer_pairing`, `nexus_streamer_discovery`) only if not already linked.
+- Test: extend `nexus_streamer_app_test` (suite likely `AppLifecycle.*` / as named in `tests/unit/app_lifecycle_test.cpp`; confirm via `-N`) with a construction/smoke assertion (no real network)
 
 **Interfaces:**
 - Consumes: `AutoPairWorker`, `deriveSetupCode`, `PairAttempt` (Task 6); `ProvisioningWindow` member added in Task 5; `PairingClient::pair(PairingParams)` and the identity-injection pattern at `StreamerApp.cpp:173-179`; `browseSpeakers()` impl (`AvahiStreamerDiscovery` under `NEXUS_STREAMER_AVAHI`, else `StubStreamerDiscovery`); the registry + `persist_()` used by `/api/pair` success.
