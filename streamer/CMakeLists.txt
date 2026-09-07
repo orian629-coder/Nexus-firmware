@@ -80,11 +80,11 @@ nexus_apply_warnings(nexus_streamer_identity)
 set_target_properties(nexus_streamer_identity PROPERTIES
   CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
 
-# ── streamer provisioning: thread-safe open/close/expiry window for zero-touch provisioning.
-# No nexus dependencies — pure logic (mutex/algorithm/cstdint only). AutoPairWorker.cpp will be
-# added to this same library in a later task. ──
-add_library(nexus_streamer_provisioning STATIC src/provisioning/ProvisioningWindow.cpp)
+# ── streamer provisioning: thread-safe open/close/expiry window for zero-touch provisioning,
+# plus the AutoPairWorker that sweeps IStreamerDiscovery while the window is open. ──
+add_library(nexus_streamer_provisioning STATIC src/provisioning/ProvisioningWindow.cpp src/provisioning/AutoPairWorker.cpp)
 target_include_directories(nexus_streamer_provisioning PUBLIC ${NEXUS_STREAMER_SRC_DIR})
+target_link_libraries(nexus_streamer_provisioning PUBLIC nexus_streamer_discovery nexus_core)
 nexus_apply_warnings(nexus_streamer_provisioning)
 set_target_properties(nexus_streamer_provisioning PROPERTIES
   CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
@@ -328,6 +328,17 @@ if(NEXUS_BUILD_TESTS)
   set_target_properties(nexus_streamer_provisioning_window_test PROPERTIES
     CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
   gtest_discover_tests(nexus_streamer_provisioning_window_test)
+
+  # Auto-pair worker: sweeps IStreamerDiscovery while the provisioning window is open and pairs
+  # each new unpaired speaker, reconstructing the setup code from its public device_id.
+  add_executable(nexus_streamer_auto_pair_worker_test tests/unit/auto_pair_worker_test.cpp)
+  target_include_directories(nexus_streamer_auto_pair_worker_test PRIVATE
+    ${NEXUS_STREAMER_SRC_DIR} ${NEXUS_SRC_DIR})
+  target_link_libraries(nexus_streamer_auto_pair_worker_test PRIVATE
+    nexus_streamer_provisioning nexus_streamer_discovery GTest::gtest GTest::gtest_main)
+  set_target_properties(nexus_streamer_auto_pair_worker_test PROPERTIES
+    CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+  gtest_discover_tests(nexus_streamer_auto_pair_worker_test)
 
   # Contract guard: the streamer must derive AP credentials from the same shared module as the
   # speaker (Task 1's nexus::identity::deriveApCredentials), not a re-implementation.
