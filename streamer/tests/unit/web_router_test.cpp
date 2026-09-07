@@ -371,7 +371,9 @@ TEST(WebRouter, PairAddsSpeakerViaRealPairingService) {
   StreamerKey key;
   group::SpeakerRegistry reg;
   auto pairing_sender = [&](const std::string& host, swp::PairingParams params) {
-    params.streamer_id = "STR-TEST";
+    // Must satisfy isWellFormedStreamerId ("STR-" + 8 lowercase hex) — PairingValidator now
+    // enforces the shape on the request this client sends.
+    params.streamer_id = "STR-facade02";
     params.streamer_public_key = key.pk_b64;
     params.streamer_secret_key = key.sk_b64;
     swp::PairingClient client(rig, host, 45455);

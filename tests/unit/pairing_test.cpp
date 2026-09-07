@@ -30,7 +30,9 @@ fs::path sandbox(const std::string& name) {
 // X25519 public key and sign a pairing request.
 struct FakeStreamer {
   std::vector<std::uint8_t> pk, sk;  // Ed25519
-  std::string id = "STR-LAB01";
+  // Must satisfy isWellFormedStreamerId ("STR-" + 8 lowercase hex) — PairingValidator now
+  // enforces the shape, so the default fixture id has to be well-formed too.
+  std::string id = "STR-1ab01234";
 
   FakeStreamer() {
     pk.resize(crypto_sign_PUBLICKEYBYTES);
@@ -105,14 +107,14 @@ TEST(Pairing, SuccessfulPairingPersistsAndDecryptsWifi) {
   auto res = rig.svc->processRequest(req, /*now*/ 1100);
   rig.bus.drain();
   ASSERT_TRUE(res.ok());
-  EXPECT_EQ(res.value().streamer_id, "STR-LAB01");
+  EXPECT_EQ(res.value().streamer_id, "STR-1ab01234");
   EXPECT_EQ(res.value().wifi.ssid, "NexusLab");
   EXPECT_EQ(res.value().wifi.psk, "wifi-secret-pw");
   EXPECT_EQ(completed, 1);
 
   // Persisted: config has public pairing info + flag; secrets hold the PSK.
   EXPECT_TRUE(rig.config->get().pairing.paired);
-  EXPECT_EQ(rig.config->get().pairing.streamer_id, "STR-LAB01");
+  EXPECT_EQ(rig.config->get().pairing.streamer_id, "STR-1ab01234");
   EXPECT_EQ(rig.config->get().pairing.streamer_public_key, streamer.pkB64());
   EXPECT_TRUE(rig.secrets->has(pairing::PairingService::kWifiPskSecret));
 
@@ -164,6 +166,32 @@ TEST(Pairing, RejectsRequestWhenNotInSetupMode) {
   auto req = streamer.makeRequest(boxpub.value(), "123456", "NexusLab", "pw");
   auto res = rig.svc->processRequest(req, 1100);  // never called beginSetupMode
   EXPECT_FALSE(res.ok());
+}
+
+TEST(Pairing, RejectsMalformedStreamerId) {
+  Rig rig("malformedid");
+  FakeStreamer streamer;
+  streamer.id = "STR-BADID";  // wrong shape: not "STR-" + 8 lowercase hex
+  auto boxpub = rig.keys->boxPublicKeyBase64();
+  rig.svc->beginSetupMode("123456", 1000, 300);
+  // Signed over the malformed id itself, so this isn't rejected on signature grounds.
+  auto req = streamer.makeRequest(boxpub.value(), "123456", "NexusLab", "pw");
+  auto res = rig.svc->processRequest(req, 1100);
+  ASSERT_FALSE(res.ok());
+  EXPECT_NE(res.status().message().find("streamer_id"), std::string::npos);
+  EXPECT_FALSE(rig.config->get().pairing.paired);
+}
+
+TEST(Pairing, AcceptsWellFormedStreamerId) {
+  Rig rig("wellformedid");
+  FakeStreamer streamer;
+  streamer.id = "STR-deadbeef";  // well-formed: "STR-" + 8 lowercase hex
+  auto boxpub = rig.keys->boxPublicKeyBase64();
+  rig.svc->beginSetupMode("123456", 1000, 300);
+  auto req = streamer.makeRequest(boxpub.value(), "123456", "NexusLab", "pw");
+  auto res = rig.svc->processRequest(req, 1100);
+  ASSERT_TRUE(res.ok());
+  EXPECT_EQ(res.value().streamer_id, "STR-deadbeef");
 }
 
 TEST(Pairing, PairingIsOneTime) {

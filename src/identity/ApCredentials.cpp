@@ -35,4 +35,15 @@ std::optional<std::string> streamerIdFromApSsid(const std::string& ssid) {
   return id;
 }
 
+bool isWellFormedStreamerId(const std::string& id) {
+  if (id.size() != 12) return false;
+  if (id.compare(0, 4, "STR-") != 0) return false;
+  for (std::size_t i = 4; i < id.size(); ++i) {
+    const char c = id[i];
+    const bool hex = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+    if (!hex) return false;
+  }
+  return true;
+}
+
 }  // namespace nexus::identity

@@ -45,3 +45,15 @@ TEST(ApCredentials, SetupApAndForeignSsidsAreNotStreamerAps) {
   EXPECT_FALSE(streamerIdFromApSsid("HomeWiFi").has_value());
   EXPECT_FALSE(streamerIdFromApSsid("").has_value());
 }
+
+TEST(ApCredentials, IsWellFormedStreamerId) {
+  using nexus::identity::isWellFormedStreamerId;
+  EXPECT_TRUE(isWellFormedStreamerId("STR-a14ad83e"));
+  EXPECT_FALSE(isWellFormedStreamerId(""));
+  EXPECT_FALSE(isWellFormedStreamerId("STR-A14AD83E"));      // uppercase
+  EXPECT_FALSE(isWellFormedStreamerId("STR-a14ad83"));       // 7 hex
+  EXPECT_FALSE(isWellFormedStreamerId("STR-a14ad83ee"));     // 9 hex
+  EXPECT_FALSE(isWellFormedStreamerId("SPK-a14ad83e"));      // wrong prefix
+  EXPECT_FALSE(isWellFormedStreamerId("STR-a14ad8;e"));      // metachar
+  EXPECT_FALSE(isWellFormedStreamerId("STR-a14ad83e\n$(x)")); // injection
+}

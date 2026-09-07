@@ -94,7 +94,9 @@ struct SpeakerPairingRig : public streamer::control::ILineTransport {
 streamer::pairing::PairingParams makeParams(SpeakerPairingRig& rig, const StreamerKey& key,
                                             const std::string& code) {
   streamer::pairing::PairingParams p;
-  p.streamer_id = "STR-LAB01";
+  // Must satisfy isWellFormedStreamerId ("STR-" + 8 lowercase hex) — PairingValidator now
+  // enforces the shape on the request this client sends.
+  p.streamer_id = "STR-facade01";
   p.streamer_public_key = key.pk_b64;
   p.streamer_secret_key = key.sk_b64;
   p.site_id = "site-1";

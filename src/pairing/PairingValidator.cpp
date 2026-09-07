@@ -1,5 +1,6 @@
 #include "pairing/PairingValidator.h"
 
+#include "identity/ApCredentials.h"
 #include "identity/Crypto.h"
 
 namespace nexus::pairing {
@@ -12,6 +13,9 @@ Status PairingValidator::validate(const PairingRequest& req,
                                   std::int64_t code_expiry_epoch) {
   if (req.streamer_id.empty() || req.streamer_public_key.empty()) {
     return Status::error(ErrorCode::InvalidArg, "missing streamer identity");
+  }
+  if (!identity::isWellFormedStreamerId(req.streamer_id)) {
+    return Status::error(ErrorCode::InvalidArg, "malformed streamer_id");
   }
   if (expected_setup_code.empty()) {
     return Status::error(ErrorCode::PermissionDenied, "no active setup code");

@@ -24,4 +24,7 @@ ApCredentials deriveApCredentials(const std::string& streamer_id);
 // otherwise std::nullopt. The setup AP ("Nexus-Setup") and foreign SSIDs return nullopt.
 std::optional<std::string> streamerIdFromApSsid(const std::string& ssid);
 
+// True iff id is exactly "STR-" followed by 8 lowercase hex chars.
+bool isWellFormedStreamerId(const std::string& id);
+
 }  // namespace nexus::identity
