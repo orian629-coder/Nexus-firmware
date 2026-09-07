@@ -19,6 +19,7 @@
 
 #include "app/StreamerApp.h"
 #include "control/TcpLineTransport.h"
+#include "identity/ApCredentials.h"
 #include "identity/StreamerIdentity.h"
 #include "send/UdpPacketSink.h"
 #include "web/HttplibStreamerTransport.h"
@@ -152,6 +153,22 @@ int main(int argc, char** argv) {
   std::cerr << "nexus-streamer: built without real sockets (NEXUS_STREAMER_REAL_NET=OFF)\n";
   return 1;
 #else
+  // `--ap-credentials`: print the derived private-AP SSID + passphrase for scripts/streamer-ap.sh
+  // to bring up the permanent Nexus-Audio AP. Keeps the KDF in exactly one place (the C++ module).
+  for (int i = 1; i < argc; ++i) {
+    if (std::string(argv[i]) == "--ap-credentials") {
+      nexus::streamer::identity::StreamerIdentity id(identityKeyPath());
+      if (const auto st = id.load(); !st.ok()) {
+        std::cerr << "identity load failed: " << st.message() << "\n";
+        return 1;
+      }
+      const auto creds = nexus::identity::deriveApCredentials(id.streamerId());
+      std::cout << "NEXUS_AP_SSID=" << creds.ssid << "\n"
+                << "NEXUS_AP_PASSPHRASE=" << creds.passphrase << "\n";
+      return 0;
+    }
+  }
+
   if (!do_serve && stream_ips.empty() && tone_ip.empty() && play_file.empty()) {
     std::cerr << "nexus-streamer: nothing to do (try --serve, --stream <ip>, --tone <ip>, "
                  "or --play <file>)\n";

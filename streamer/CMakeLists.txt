@@ -309,6 +309,17 @@ if(NEXUS_BUILD_TESTS)
     CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
   gtest_discover_tests(nexus_streamer_identity_test)
 
+  # Contract guard: the streamer must derive AP credentials from the same shared module as the
+  # speaker (Task 1's nexus::identity::deriveApCredentials), not a re-implementation.
+  add_executable(nexus_streamer_ap_credentials_test tests/unit/ap_credentials_contract_test.cpp)
+  target_include_directories(nexus_streamer_ap_credentials_test PRIVATE
+    ${NEXUS_STREAMER_SRC_DIR} ${NEXUS_SRC_DIR})
+  target_link_libraries(nexus_streamer_ap_credentials_test PRIVATE
+    nexus_identity GTest::gtest GTest::gtest_main)
+  set_target_properties(nexus_streamer_ap_credentials_test PROPERTIES
+    CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+  gtest_discover_tests(nexus_streamer_ap_credentials_test)
+
   # Discovery interface/stub contract (real Avahi path exercised on the Pi).
   add_executable(nexus_streamer_discovery_test tests/unit/discovery_test.cpp)
   target_include_directories(nexus_streamer_discovery_test PRIVATE
