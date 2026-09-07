@@ -16,4 +16,8 @@ namespace nexus::app {
 // truth in nexus::identity::deriveApCredentials, so speaker and streamer agree byte-for-byte.
 std::optional<nexus::identity::ApCredentials> apCredentialsFromConfig(const std::string& config_path);
 
+// Derive AP creds from a scanned SSID (unpaired bootstrap). nullopt if the
+// SSID is not a well-formed Nexus streamer AP.
+std::optional<nexus::identity::ApCredentials> apCredentialsForSsid(const std::string& ssid);
+
 }  // namespace nexus::app

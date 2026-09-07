@@ -90,3 +90,21 @@ TEST(SpeakerApCredentials, WrongShapeStreamerIdReturnsNullopt) {
     std::remove(path.c_str());
   }
 }
+
+TEST(SpeakerApCredentials, ForSsidValidMatchesDerive) {
+  const auto creds = nexus::app::apCredentialsForSsid("Nexus-STR-a14ad83e");
+  ASSERT_TRUE(creds.has_value());
+  const auto expected = nexus::identity::deriveApCredentials("STR-a14ad83e");
+  EXPECT_EQ(creds->ssid, expected.ssid);
+  EXPECT_EQ(creds->passphrase, expected.passphrase);
+  EXPECT_EQ(creds->ssid, "Nexus-STR-a14ad83e");
+}
+
+TEST(SpeakerApCredentials, ForSsidRejectsMalformedAndForeign) {
+  EXPECT_FALSE(nexus::app::apCredentialsForSsid("").has_value());
+  EXPECT_FALSE(nexus::app::apCredentialsForSsid("Nexus-Setup").has_value());
+  EXPECT_FALSE(nexus::app::apCredentialsForSsid("SomeCafeWiFi").has_value());
+  EXPECT_FALSE(nexus::app::apCredentialsForSsid("Nexus-STR-A14AD83E").has_value()); // uppercase
+  EXPECT_FALSE(nexus::app::apCredentialsForSsid("Nexus-STR-a14ad8;e").has_value()); // metachar
+  EXPECT_FALSE(nexus::app::apCredentialsForSsid("Nexus-STR-a14ad83e\n$(touch /tmp/x)").has_value());
+}

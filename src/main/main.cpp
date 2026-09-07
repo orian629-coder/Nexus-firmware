@@ -18,6 +18,8 @@ void printUsage(const char* prog) {
             << "  --config <path>    Path to config.json (default /etc/nexus-speaker/config.json)\n"
             << "  --data-dir <path>  Sandbox root for identity/secure/log (dev/testing)\n"
             << "  --ap-credentials   Print the paired streamer's AP SSID/passphrase and exit\n"
+            << "  --ap-credentials-for-ssid <ssid>  Derive AP SSID/passphrase from a scanned\n"
+            << "                     streamer AP SSID (unpaired bootstrap) and exit\n"
             << "  --version          Print version and exit\n"
             << "  --help             Show this help\n";
 }
@@ -26,6 +28,8 @@ void printUsage(const char* prog) {
 int main(int argc, char** argv) {
   nexus::AppOptions opts;
   bool want_ap_credentials = false;
+  bool want_ap_credentials_for_ssid = false;
+  std::string ap_credentials_for_ssid;
 
   for (int i = 1; i < argc; ++i) {
     std::string arg = argv[i];
@@ -41,6 +45,13 @@ int main(int argc, char** argv) {
       opts.log_path = root + "/speaker.log";
     } else if (arg == "--ap-credentials") {
       want_ap_credentials = true;
+    } else if (arg == "--ap-credentials-for-ssid") {
+      if (i + 1 >= argc) {
+        std::cerr << "nexus-speaker: --ap-credentials-for-ssid requires an SSID\n";
+        return 2;
+      }
+      ap_credentials_for_ssid = argv[++i];
+      want_ap_credentials_for_ssid = true;
     } else if (arg == "--version") {
       std::cout << "nexus-speaker " << "0.1.0" << "\n";
       return 0;
@@ -60,6 +71,19 @@ int main(int argc, char** argv) {
     const auto creds = nexus::app::apCredentialsFromConfig(opts.config_path);
     if (!creds) {
       std::cerr << "nexus-speaker: not paired — no streamer AP credentials\n";
+      return 1;
+    }
+    std::cout << "NEXUS_AP_SSID=" << creds->ssid << "\n"
+              << "NEXUS_AP_PASSPHRASE=" << creds->passphrase << "\n";
+    return 0;
+  }
+
+  // `--ap-credentials-for-ssid <ssid>`: bootstrap path for an UNPAIRED speaker — derive AP
+  // creds directly from a scanned streamer AP SSID, then exit without starting the app.
+  if (want_ap_credentials_for_ssid) {
+    const auto creds = nexus::app::apCredentialsForSsid(ap_credentials_for_ssid);
+    if (!creds) {
+      std::cerr << "nexus-speaker: not a Nexus streamer AP SSID\n";
       return 1;
     }
     std::cout << "NEXUS_AP_SSID=" << creds->ssid << "\n"

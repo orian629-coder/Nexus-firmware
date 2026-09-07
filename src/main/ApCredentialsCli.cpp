@@ -39,4 +39,18 @@ std::optional<nexus::identity::ApCredentials> apCredentialsFromConfig(
   }
 }
 
+// Bootstrap path for an UNPAIRED speaker: derive AP credentials directly from a scanned SSID
+// (no stored streamer_id yet). Shape-gated the same way as apCredentialsFromConfig — the SSID
+// must recover a well-formed streamer_id via streamerIdFromApSsid, so malformed/foreign SSIDs
+// (including anything carrying shell/regex metacharacters) fail closed to std::nullopt.
+std::optional<nexus::identity::ApCredentials> apCredentialsForSsid(const std::string& ssid) {
+  try {
+    const auto id = nexus::identity::streamerIdFromApSsid(ssid);
+    if (!id || !nexus::identity::isWellFormedStreamerId(*id)) return std::nullopt;
+    return nexus::identity::deriveApCredentials(*id);
+  } catch (const std::exception&) {
+    return std::nullopt;
+  }
+}
+
 }  // namespace nexus::app
