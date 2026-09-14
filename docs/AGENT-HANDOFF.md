@@ -109,8 +109,10 @@ Detailed history lives in the `docs/*BENCH*` and `docs/*DESIGN*` files; this is 
 
 These are load-bearing. Breaking them can brick a client device or silently un-pair the fleet.
 
-1. **These are client devices. Never deploy, flash, or reboot a real device without explicit
-   human approval.** Host builds and tests are always fine. On-device steps are human-gated.
+1. **Deploying to your own development devices is normal dev work — go ahead.** Host builds and
+   tests are always fine too. The one hard line: do **not** flash, reboot, or reconfigure the
+   customer's live/production units without explicit approval. If you are unsure whether a given
+   device is a dev unit or a live one, ask before touching it.
 2. **Discovery wire contract is frozen.** The mDNS service names, ports, and TXT fields
    (`docs/protocol.md`, and the box in `CLAUDE.md`) are a two-sided contract. Changing one side
    breaks interop. Any change means: change *both* sides, bump the protocol version, update
@@ -125,13 +127,28 @@ These are load-bearing. Breaking them can brick a client device or silently un-p
 5. **Do not commit** build dirs (`build*/`), device config, keys, or `.DS_Store`. `.gitignore`
    already covers `*.key`, `identity/`, `config.local.json`, and build output.
 
-## 6. About the devices (bench access)
+## 6. Devices — using your own hardware
 
-The three Raspberry Pis (streamer + two speakers) live on the consultant's bench, not in this
-repo. `CLAUDE.md` lists SSH names, but real access to them is through that lab network. If you are
-an agent working only from the source: do your work as **host builds + unit tests + small
-reviewed diffs**, and treat every on-device action (deploy, reboot, bench test) as something a
-human with physical access runs after approval. Do not assume you can reach a device.
+The repo owner has their **own** Nexus development devices (a streamer + speakers) for on-device
+work. Building, deploying, and testing on those is expected — that is how you close the loop on
+anything involving real mDNS, Wi-Fi, or audio, all of which the host build stubs out.
+
+Deploy loop for a device:
+- **Speaker:** `scripts/deploy.sh <user>@<your-speaker-host>` — rsyncs the source, builds with the
+  real HALs, and runs the installer. Details in `docs/bring-up.md` and `docs/installation.md`.
+- **Streamer:** currently a manual deploy — see `docs/streamer.md`.
+- Device builds use the real HALs (`-DNEXUS_STUB_HAL=OFF`, the `rpi-release` preset). If the
+  device has no internet (for example it is on the streamer's private AP), pre-place `httplib.h`
+  v0.15.3 in `/usr/local/include` first or the `cpp-httplib` fetch fails (see section 3).
+
+**Important — the coordinates in these docs are not your devices.** Device hostnames, IPs, and
+identities mentioned here and in `CLAUDE.md` (`nexus-audio@streamer`, `10.42.0.x`, streamer
+`STR-a14ad83e`, the under-voltage note on the bench speakers, etc.) come from the **original
+consultant bench** and will **not** match your hardware. Treat them as reference, and point your
+work at your own device coordinates.
+
+The one caution that still holds: do not flash or reboot the **customer's live/production** units
+without explicit approval (guardrail 1). Your own dev bench is yours to use freely.
 
 ## 7. Suggested next steps, in priority order
 

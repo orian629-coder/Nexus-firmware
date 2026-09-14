@@ -25,8 +25,10 @@ layer** — what to touch, what not to, and what's currently broken.
 | speaker1 | `ssh nexus-audio@speaker1` | `nexus-speaker.service` | :8080 |
 | speaker2 | `ssh nexus-audio@speaker2` | `nexus-speaker.service` (stale at import) | :8080 |
 
-Passwordless sudo on all three. **These are client devices — never deploy/flash without
-explicit human approval.**
+Passwordless sudo on all three. These specific hosts are the **original consultant bench**; if you
+have your own dev devices, use those and treat these coordinates as reference (see
+`docs/AGENT-HANDOFF.md` §6). **The live/production customer units are never deployed/flashed/rebooted
+without explicit human approval.**
 
 ## Roles & build
 - One source tree → two binaries: **`nexus-speaker`** and **`nexus-streamer`**. Role = which
