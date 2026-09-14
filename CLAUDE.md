@@ -6,6 +6,11 @@ agents. Deep docs live in `docs/` (start with `docs/architecture.md`, `docs/prot
 `docs/state-machine.md`, `docs/streamer.md`). **This file is the guardrails + current-status
 layer** — what to touch, what not to, and what's currently broken.
 
+> **New here / just picked this repo up?** Read **[docs/AGENT-HANDOFF.md](docs/AGENT-HANDOFF.md)**
+> first. It is the single onboarding page for a successor engineer or AI agent: where the code
+> is, how to build and test it, exactly what works vs. what is still open, and what to do next.
+> `master` holds the full current code (the original as-found import is the `baseline-import` tag).
+
 ## Origin & version control
 - Imported **2026-09-06** from **unversioned** on-device code. Before that it lived ONLY on the
   Pis — no git, no backup. The `streamer` device held the canonical (newest) copy; `speaker1`
@@ -54,15 +59,25 @@ Changing any of these requires: change **both** sides, bump the protocol version
 - Secrets live outside the source tree (`/etc/...`; `/var/lib/nexus-streamer/config.json` holds
   `web.auth_token`). Never commit device config or keys.
 
-## Current status (2026-09)
-- **Working:** audio path, pairing handshake (`PairingClient`), Wi-Fi onboarding
-  (`ApScanner`/`ApJoiner`, `/api/onboard-ap`), identity, heartbeat.
-- **BROKEN / WIP — do not assume these work:** mDNS discovery orchestration.
-  - Speaker never browses for the streamer (`findStreamer()` has no caller; `StreamerFinder`
-    is an empty stub) → sits forever in `SEARCHING_STREAMER`.
-  - Streamer `advertise()` is one-shot with no worker thread → nothing stays on the wire.
-  - `/api/discover` returns 501 (`discoverer` passed as `nullptr`).
-  - **Active fix:** `docs/DISCOVERY-FIX-PLAN.md`.
+## Current status (2026-09-14)
+Full detail + open tasks: **[docs/AGENT-HANDOFF.md](docs/AGENT-HANDOFF.md)**. Summary:
+- **Working:** audio path, pairing handshake (`PairingClient`), Wi-Fi onboarding, identity,
+  heartbeat.
+- **Discovery orchestration — FIXED** (was the original job; `docs/DISCOVERY-FIX-PLAN.md`).
+  Speaker browses `_nexus-streamer._tcp` and finds the streamer; streamer advertises on a
+  worker thread; both proven on-wire on-device.
+- **Streamer-as-AP + boot-join — BUILT & proven on device.** The venue Wi-Fi does not pass
+  client-to-client mDNS multicast, so the streamer runs its own WPA2 AP (`Nexus-<streamer_id>`)
+  and speakers join it at boot before the app starts (`scripts/speaker-ap-join.sh`). See
+  `docs/STREAMER-AP-DESIGN.md`, `docs/STREAMER-AP-BENCH-FINDINGS.md`.
+- **Zero-touch provisioning — BUILT, host-reviewed; first on-device bench found ONE blocking
+  bug** (unpaired bootstrap does a single Wi-Fi scan and gives up — fix designed, not yet
+  applied). See `docs/ZERO-TOUCH-PROVISIONING-DESIGN.md`, `docs/ZERO-TOUCH-BENCH-2026-09-07.md`.
+- **Open ceiling (F-B):** a paired speaker discovers the streamer but stalls in
+  `AUTHENTICATING`, never reaching `ONLINE`, on every network — needs a dedicated trace.
+- **Hardware:** the bench speakers show Pi under-voltage (`vcgencmd get_throttled` non-zero),
+  which destabilises Wi-Fi/mDNS. That is a power-delivery fix (proper 5V PSU + short USB-C
+  cable), not a code fix.
 
 ## Guardrails for automated contributors (Claude Code et al.)
 - Work on a branch; never commit straight to `master`. Small, reviewed diffs.
