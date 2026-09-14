@@ -5,6 +5,13 @@ Companion to [AGENT-HANDOFF.md](AGENT-HANDOFF.md). Answers the common first ques
 talks?") and lays out the next steps. Everything below was verified against the source on
 `master`, not the README (which is stale in places, noted inline).
 
+**Scope note.** The GUIs and the DSP/EQ described below already existed in the firmware; they are
+not the recent connectivity work and nothing was built to "attach" to them. The recent work is the
+connectivity layer (discovery, pairing, streamer-as-AP, zero-touch provisioning), which gets a
+speaker as far as *discovered + paired*. The current priority (section 4, item 1) is closing the
+last link so a paired speaker reaches `ONLINE` and becomes live and controllable in the existing
+GUI.
+
 ## 1. What already exists (do not rebuild these)
 
 **Three working GUIs are already in the repo:**
@@ -66,9 +73,11 @@ Suggested bring-up on your own devices, in order:
 
 ## 4. Engineering next steps (priority order)
 
-1. **Trace and fix F-B** (`AUTHENTICATING -> ONLINE`). Unblocks the managed audio/control flow.
-   Start from `docs/state-machine.md` and the control/pairing path. This can now be done on your
-   own bench hardware.
+1. **Trace and fix F-B** (`AUTHENTICATING -> ONLINE`) — the missing link between the pairing layer
+   and the existing GUI. A discovered + paired speaker currently stalls in `AUTHENTICATING` and
+   never becomes a live, controllable speaker in the `:8090` UI, so the connectivity work does not
+   yet surface through to the GUI. Fixing this step is what connects the two. Start from
+   `docs/state-machine.md` and the control/pairing path; doable on your own bench hardware.
 2. **Wire up the deferred commands** so the GUI is fully live: make transport (play/pause/stop),
    self-test, and calibration actually execute on the speaker instead of acking as no-ops.
 3. **Apply the zero-touch scan-retry fix** (patch in `docs/ZERO-TOUCH-BENCH-2026-09-07.md`) to
