@@ -164,6 +164,8 @@ without explicit approval (guardrail 1). Your own dev bench is yours to use free
 
 ## 8. Doc index
 
+- `docs/ROADMAP.md` — what already exists (GUIs, DSP/EQ), how to play sound + verify comms on a
+  bench, and the prioritized next steps. Read this if you are asked about the GUI or "what's next".
 - `CLAUDE.md` — guardrails + current-status (read after this page).
 - `README.md` — module map and host build.
 - `docs/architecture.md`, `docs/protocol.md`, `docs/state-machine.md`, `docs/streamer.md` — design.
